@@ -11,7 +11,7 @@ use super::*;
 /// so the same dish became a new product on every menu import.
 #[test]
 fn a_non_ascii_key_survives_the_image() {
-    let keys = ["pije-ujë-0-5l", "sushi-sets-durrës-set-24", "страва-суші", "ascii-plain"];
+    let keys = ["pije-ujë-0-5l", "sushi-sets-detarë-set-24", "страва-суші", "ascii-plain"];
     let mut st = Store::create_bytes(64 * 1024).unwrap();
     Kv::init_bytes(&mut st).expect("init");
     let mut kv = Kv::load(&st).expect("load");

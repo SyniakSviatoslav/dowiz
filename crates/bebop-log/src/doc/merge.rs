@@ -41,12 +41,12 @@ use super::cut::{read_old, seals_of, Old};
 use super::keys::{narrower, stage_key, stage_keys, valid_at, Key};
 use super::merge_body::{Row, MERGE_MARK};
 use super::seal::{stage_heads, stage_seal, Head, Seal};
-use super::seg::{parse_forgotten, stage_seg, Segment};
+use super::seg::{frontier_of, parse_forgotten, stage_seg, Segment};
 use super::verify::{verify, verify_with, Trust};
 use super::write::{stage_doc, Refs};
 use super::{Doc, DocError, Ids, Verifier};
 
-type Actor = [u8; 32];
+pub(super) type Actor = [u8; 32];
 
 /// What a merge found. `wrote` false: `fresh` is untouched, this file already holds everything.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,11 +64,11 @@ pub struct Union {
     pub both_wrote: bool,
 }
 
-fn rows_of(o: &Old) -> Vec<Row> {
+pub(super) fn rows_of(o: &Old) -> Vec<Row> {
     o.heads.iter().map(|h| Row { actor_id: h.actor_id, seq: h.seq, tip: h.tip }).collect()
 }
 
-fn genesis(o: &Old) -> BTreeSet<Actor> {
+pub(super) fn genesis(o: &Old) -> BTreeSet<Actor> {
     o.keys.iter().filter(|k| k.admit_rec.is_none()).map(|k| k.actor_id).collect()
 }
 
@@ -77,7 +77,7 @@ fn plain(segs: &[Segment]) -> Vec<Segment> {
     segs.iter().map(|s| Segment { prev: None, ..s.clone() }).collect()
 }
 
-fn chains(o: &Old) -> BTreeMap<Actor, Vec<&Record>> {
+pub(super) fn chains(o: &Old) -> BTreeMap<Actor, Vec<&Record>> {
     let mut m: BTreeMap<Actor, Vec<&Record>> = BTreeMap::new();
     for (_, r) in &o.recs {
         m.entry(r.actor_pubkey).or_default().push(r);
@@ -109,7 +109,7 @@ fn missing(o: &Old, t: &Old) -> Result<(BTreeSet<Actor>, BTreeSet<Actor>), DocEr
 }
 
 /// A tail record M2-min may not take in.
-fn check_tail(tail: &[Record], ids: &dyn Ids) -> Result<(), DocError> {
+pub(super) fn check_tail(tail: &[Record], ids: &dyn Ids) -> Result<(), DocError> {
     for r in tail {
         if ids.redacted(r.flags, &r.payload) || parse_forgotten(ids.body(r.flags, &r.payload)).is_some() {
             return Err(DocError::ForgetOneSide);
@@ -124,7 +124,7 @@ fn check_tail(tail: &[Record], ids: &dyn Ids) -> Result<(), DocError> {
 /// The REVOKEs each side's `verify` found effective, folded per target (`settle.rs`'s rule: the
 /// earliest wins), and `RevokedTail` for any record past one. A record that merely reads like a
 /// REVOKE (an actor with no key, an unsound record) declares nothing, here as there.
-fn revoked(recs: &[&Record], revokes: &[(Actor, i64)]) -> Result<BTreeMap<Actor, i64>, DocError> {
+pub(super) fn revoked(recs: &[&Record], revokes: &[(Actor, i64)]) -> Result<BTreeMap<Actor, i64>, DocError> {
     let mut cell: BTreeMap<Actor, i64> = BTreeMap::new();
     for (target, after) in revokes {
         let c = cell.entry(*target).or_insert(0);
@@ -140,7 +140,7 @@ fn revoked(recs: &[&Record], revokes: &[(Actor, i64)]) -> Result<BTreeMap<Actor,
 
 /// Every key of both sides once, `KeyClash` when one actor names two; `ours` comes first, and each
 /// key's ADMIT record named by id, because the offsets are the side's.
-fn keys_of(o: &Old, t: &Old) -> Result<Vec<(Key, Option<Actor>)>, DocError> {
+pub(super) fn keys_of(o: &Old, t: &Old) -> Result<Vec<(Key, Option<Actor>)>, DocError> {
     let id_at = |s: &Old| -> BTreeMap<usize, Actor> { s.recs.iter().map(|(at, r)| (*at, r.id)).collect() };
     let (ido, idt) = (id_at(o), id_at(t));
     let mut out: Vec<(Key, Option<Actor>)> = Vec::new();
@@ -158,7 +158,7 @@ fn keys_of(o: &Old, t: &Old) -> Result<Vec<(Key, Option<Actor>)>, DocError> {
     Ok(out)
 }
 
-fn same_seal(a: &Seal, b: &Seal) -> bool {
+pub(super) fn same_seal(a: &Seal, b: &Seal) -> bool {
     a.seq == b.seq && a.tip == b.tip && a.claimed_ms == b.claimed_ms && a.alg == b.alg && a.sig == b.sig
 }
 
@@ -186,7 +186,7 @@ fn seal_chains(o: &Old, ours: &Store, t: &Old, theirs: &Store) -> Result<(BTreeM
 }
 
 /// One anchor's identity: unsigned, and carried like any other, judged by whoever checks it.
-fn anchor_key(a: &Anchor) -> (i64, Actor, i64, Vec<u8>) {
+pub(super) fn anchor_key(a: &Anchor) -> (i64, Actor, i64, Vec<u8>) {
     (a.kind, a.over, a.time_ms, a.proof.clone())
 }
 
@@ -244,7 +244,7 @@ impl Doc {
 
 /// The union, one transaction: records, keys, seals, HEADS, anchors, segments, the DOC last.
 #[allow(clippy::too_many_arguments)]
-fn stage_union(st: &mut Store, tx: &mut Tx, o: &Old, recs: &[&Record], keys: &[(Key, Option<Actor>)], cell: &BTreeMap<Actor, i64>, seals: &BTreeMap<Actor, Vec<Seal>>, new_anchors: &[&Anchor]) -> Result<usize, DocError> {
+pub(super) fn stage_union(st: &mut Store, tx: &mut Tx, o: &Old, recs: &[&Record], keys: &[(Key, Option<Actor>)], cell: &BTreeMap<Actor, i64>, seals: &BTreeMap<Actor, Vec<Seal>>, new_anchors: &[&Anchor]) -> Result<usize, DocError> {
     let mut log = EvLog::stage_init_in(st, tx)?;
     let mut at: BTreeMap<Actor, usize> = BTreeMap::new();
     for r in recs {
@@ -269,6 +269,10 @@ fn stage_union(st: &mut Store, tx: &mut Tx, o: &Old, recs: &[&Record], keys: &[(
         }
         if let Some(top) = chain.last() {
             heads.push(Head { actor_id: *actor, seq: top.seq, tip: top.tip, seal: prev });
+        } else if let Some(f) = frontier_of(&o.segs, actor) {
+            // Every seal of this device left with a cut. The row comes from the frontier, signed
+            // through the TRUNCATE, not from a side's HEADS row, which nothing checks.
+            heads.push(Head { actor_id: *actor, seq: f.seq, tip: f.tip, seal: None });
         }
     }
     let heads_root = stage_heads(st, tx, &mut heads)?;

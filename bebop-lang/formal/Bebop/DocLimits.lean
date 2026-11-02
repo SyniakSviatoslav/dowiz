@@ -19,9 +19,9 @@
                               forked" is false without NoPastRevoke
     unsealed_prefix_fails     a record prefix past the last seal does not hold
     union_holds_side_does_not a union can hold while a side does not: `merge_into` checks sides first
-    ring_holds                a hash ring passes every field of Holds under NoCollision, and no walk
-                              ends: the code's walk stops on `seen`, and the end at genesis is the
-                              hash's, not a counter's
+    ring_refused              a hash ring does not hold, and `Grounded` is what says so: `unsealed`
+                              counts a walk that comes back to itself (W-MG-LEAN). Until then it
+                              passed every field here, as `ring_holds`, and the code took it too
 -/
 import Bebop.DocMerge
 
@@ -50,6 +50,7 @@ structure SealedPrefix (W : World A I P G) (Q F : File A I P G) : Prop where
   vouched : ∀ r ∈ Q.recs, ∃ s ∈ Q.seals, Reach Q.recs s.tip r
   ends : ∀ r ∈ Q.recs, EndsOk W Q r.prev
   owned : ∀ r ∈ Q.recs, ∃ s ∈ Q.seals, s.actor = r.actor ∧ r.seq ≤ s.seq
+  grounded : ∀ r ∈ Q.recs, Grounded W Q r
 
 /-- A prefix of a dense chain is one. -/
 theorem linked_of_prefix {c d : List (Rec A I P)} (h : c <+: d) (hd : Linked d) : Linked c := by
@@ -70,7 +71,7 @@ theorem rollback_holds {W : World A I P G} {Q F : File A I P G} (H : Holds W F)
       idsOnce := fun x hx y hy he => H.idsOnce x (hmem x hx) y (hmem y hy) he,
       noFork := fun x hx y hy ha hs => H.noFork x (hmem x hx) y (hmem y hy) ha hs,
       device := ?_, sealsOk := ?_, sealed := hp.sealed, vouched := hp.vouched, ends := hp.ends,
-      owned := hp.owned }
+      owned := hp.owned, grounded := hp.grounded }
   · intro a
     have hd := H.device a
     refine ⟨linked_of_prefix (hp.chains a) hd.1, fun x hx => ?_⟩
@@ -165,6 +166,11 @@ theorem fOne_holds : Holds Wz fOne where
     simp only [fOne, List.mem_singleton] at hr
     subst hr
     exact ⟨s1, by simp [fOne], rfl, Nat.le_refl _⟩
+  grounded := by
+    intro r hr
+    simp only [fOne, List.mem_singleton] at hr
+    subst hr
+    exact .zero (by simp [fOne]) rfl
 
 theorem fTwo_holds : Holds Wz fTwo where
   ids := by
@@ -216,6 +222,12 @@ theorem fTwo_holds : Holds Wz fTwo where
     rcases hr with rfl | rfl
     · exact ⟨s1, by simp [fTwo], rfl, Nat.le_refl _⟩
     · exact ⟨s2, by simp [fTwo], rfl, Nat.le_refl _⟩
+  grounded := by
+    intro r hr
+    simp only [fTwo, List.mem_cons, List.not_mem_nil, or_false] at hr
+    rcases hr with rfl | rfl
+    · exact .zero (by simp [fTwo]) rfl
+    · exact .step (q := r1) (by simp [fTwo]) (by simp [fTwo]) rfl (.zero (by simp [fTwo]) rfl)
 
 theorem fRevoked_holds : Holds Wz fRevoked where
   ids := by
@@ -270,6 +282,10 @@ theorem fRevoked_holds : Holds Wz fRevoked where
     rcases hr with rfl | rfl
     · exact ⟨s1, by simp [fRevoked], rfl, Nat.le_refl _⟩
     · exact ⟨t1, by simp [fRevoked], rfl, Nat.le_refl _⟩
+  grounded := by
+    intro r hr
+    simp only [fRevoked, List.mem_cons, List.not_mem_nil, or_false] at hr
+    rcases hr with rfl | rfl <;> exact .zero (by simp [fRevoked]) rfl
 
 /-- The rollback is a `SealedPrefix`. -/
 theorem fOne_prefix_of_fRevoked : SealedPrefix Wz fOne fRevoked where
@@ -287,6 +303,7 @@ theorem fOne_prefix_of_fRevoked : SealedPrefix Wz fOne fRevoked where
   vouched := fOne_holds.vouched
   ends := fOne_holds.ends
   owned := fOne_holds.owned
+  grounded := fOne_holds.grounded
 
 /-- A REVOKE stands in one file, its prefix holds without it, and the revoked key writes on, past the
   REVOKE, in a file that holds. Nothing in `fTwo` shows it. -/
@@ -340,69 +357,23 @@ def x1 : ZRec := ⟨11, 1, 1, 21, 0⟩
 def y1 : ZRec := ⟨21, 2, 1, 11, 0⟩
 def fRing : ZFile := ⟨[x1, y1], [⟨1, 1, 11, 0, ()⟩, ⟨2, 1, 21, 0, ()⟩], []⟩
 
-theorem ring_green : Holds Wz fRing where
-  ids := by
-    intro r hr
-    simp only [fRing, List.mem_cons, List.not_mem_nil, or_false] at hr
-    rcases hr with rfl | rfl <;> rfl
-  nodup := by simp [fRing, x1, y1]
-  idsOnce := by
-    intro x hx y hy he
+/-- NO RING HOLDS, whatever else it passes: no id collides here, every id is the formula's, and each
+  record reaches the other, but neither walk ends. The code refuses this by counting (`unsealed`); it
+  used to stop on `seen` and pass. -/
+theorem ring_refused : NoCollision fRing.recs ∧ ¬ Holds Wz fRing := by
+  refine ⟨?_, fun H => ?_⟩
+  · intro x hx y hy he
     simp only [fRing, List.mem_cons, List.not_mem_nil, or_false] at hx hy
     rcases hx with rfl | rfl <;> rcases hy with rfl | rfl <;> simp_all [x1, y1]
-  noFork := by
-    intro x hx y hy ha _
-    simp only [fRing, List.mem_cons, List.not_mem_nil, or_false] at hx hy
-    rcases hx with rfl | rfl <;> rcases hy with rfl | rfl <;> simp_all [x1, y1]
-  device := by
-    intro a
-    by_cases h : a = 1
-    · subst h
-      rw [show chainOf fRing 1 = [x1] from rfl]
-      exact ⟨trivial, fun x hx => start_of_head rfl hx⟩
-    · by_cases h2 : a = 2
-      · subst h2
-        rw [show chainOf fRing 2 = [y1] from rfl]
-        exact ⟨trivial, fun x hx => start_of_head rfl hx⟩
-      · rw [chain_cases _ a (by simp [fRing, x1, y1]; omega)]; exact ⟨trivial, by simp⟩
-  sealsOk := by
-    have hv : ∀ a n, Valid Wz fRing a n := by
-      intro a n r hr after h
-      simp only [fRing, List.mem_cons, List.not_mem_nil, or_false] at hr
-      rcases hr with rfl | rfl <;> simp [Wz, x1, y1] at h
-    intro s hs
-    simp only [fRing, List.mem_cons, List.not_mem_nil, or_false] at hs
-    rcases hs with rfl | rfl
-    · exact ⟨⟨⟨x1, by simp [fRing], rfl, rfl, rfl⟩, hv _ _, rfl⟩, .root (.inl rfl)⟩
-    · exact ⟨⟨⟨y1, by simp [fRing], rfl, rfl, rfl⟩, hv _ _, rfl⟩, .root (.inr rfl)⟩
-  sealed := by simp [fRing]
-  vouched := by
-    intro r hr
-    simp only [fRing, List.mem_cons, List.not_mem_nil, or_false] at hr
-    rcases hr with rfl | rfl
-    · exact ⟨⟨1, 1, 11, 0, ()⟩, by simp [fRing], .tip (by simp [fRing]) rfl⟩
-    · exact ⟨⟨2, 1, 21, 0, ()⟩, by simp [fRing], .tip (by simp [fRing]) rfl⟩
-  ends := by
-    intro r hr
-    simp only [fRing, List.mem_cons, List.not_mem_nil, or_false] at hr
-    rcases hr with rfl | rfl
-    · exact .inr (.inr ⟨y1, by simp [fRing], rfl⟩)
-    · exact .inr (.inr ⟨x1, by simp [fRing], rfl⟩)
-  owned := by
-    intro r hr
-    simp only [fRing, List.mem_cons, List.not_mem_nil, or_false] at hr
-    rcases hr with rfl | rfl
-    · exact ⟨⟨1, 1, 11, 0, ()⟩, by simp [fRing], rfl, Nat.le_refl _⟩
-    · exact ⟨⟨2, 1, 21, 0, ()⟩, by simp [fRing], rfl, Nat.le_refl _⟩
-
-/-- A file with no collision, every field green, and no record whose walk ends. "Chains end at genesis
-  or a frontier tip" is not a counter's result: it is the hash, which is `chain_ends`'s hypothesis. -/
-theorem ring_holds : Holds Wz fRing ∧ NoCollision fRing.recs ∧
-    ∀ r ∈ fRing.recs, r.prev ≠ Wz.zero ∧ ∀ f ∈ fRing.rows, f.tip ≠ r.prev := by
-  refine ⟨ring_green, ring_green.idsOnce, ?_⟩
-  intro r hr
-  simp only [fRing, List.mem_cons, List.not_mem_nil, or_false] at hr
-  rcases hr with rfl | rfl <;> simp [Wz, fRing, x1, y1]
+  · have none : ∀ r, Grounded Wz fRing r → False := by
+      intro r h
+      induction h with
+      | zero hm h0 =>
+        simp only [fRing, List.mem_cons, List.not_mem_nil, or_false] at hm
+        rcases hm with rfl | rfl <;> simp [Wz, x1, y1] at h0
+      | tip _ hf _ => simp [fRing] at hf
+      | step _ _ _ _ ih => exact ih
+    exact none x1 (H.grounded x1 (by simp [fRing]))
 
 end Bebop.DocLog
 
@@ -411,4 +382,4 @@ end Bebop.DocLog
 #print axioms Bebop.DocLog.past_revoke_blocks_union
 #print axioms Bebop.DocLog.unsealed_prefix_fails
 #print axioms Bebop.DocLog.union_holds_side_does_not
-#print axioms Bebop.DocLog.ring_holds
+#print axioms Bebop.DocLog.ring_refused

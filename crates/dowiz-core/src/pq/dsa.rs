@@ -1008,6 +1008,31 @@ pub fn verify(pk: &MlDsa65Pk, msg: &[u8], sig: &MlDsa65Sig) -> bool {
     verify_internal_bytes(&pk.bytes, msg, &sig.bytes)
 }
 
+/// `M'` of the external `ML-DSA.Sign` / `ML-DSA.Verify` (FIPS 204 Alg 2 and 3), pure:
+/// `0x00 ‖ len(ctx) ‖ ctx ‖ msg`. A signature over `msg` through the internal interface is not
+/// a signature any stock library checks (R-MLDSA-PROVENANCE §2). `ctx` over 255 bytes panics: FIPS
+/// 204 has no such context, and the only callers here pass a constant.
+pub fn external_message(ctx: &[u8], msg: &[u8]) -> Vec<u8> {
+    assert!(ctx.len() <= 255, "FIPS 204: |ctx| <= 255");
+    let mut m = Vec::with_capacity(2 + ctx.len() + msg.len());
+    m.push(0);
+    m.push(ctx.len() as u8);
+    m.extend_from_slice(ctx);
+    m.extend_from_slice(msg);
+    m
+}
+
+/// External pure ML-DSA with the empty context, `M' = 00 00 ‖ msg`: the seal's interface, and the
+/// differential oracle for `bebop-sig-mldsa`.
+pub fn sign_pure_bytes(sk: &[u8], msg: &[u8], rnd: &[u8; RNDBYTES]) -> Vec<u8> {
+    sign_internal_bytes(sk, &external_message(b"", msg), rnd)
+}
+
+/// The verifying half of [`sign_pure_bytes`].
+pub fn verify_pure_bytes(pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
+    verify_internal_bytes(pk, &external_message(b"", msg), sig)
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // NIST ACVP FIPS204 ML-DSA-65 byte-exact property-gate (GREEN)
 // Parses the vendored official NIST ACVP vectors and asserts byte-exact agreement
@@ -1015,6 +1040,8 @@ pub fn verify(pk: &MlDsa65Pk, msg: &[u8], sig: &MlDsa65Sig) -> bool {
 // ─────────────────────────────────────────────────────────────────────────────
 #[cfg(test)]
 mod dsa_acvp_tests;
+#[cfg(test)]
+mod dsa_acvp_external_tests;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Tests

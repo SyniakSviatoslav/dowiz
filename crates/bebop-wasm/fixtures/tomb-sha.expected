@@ -1,4 +1,4 @@
-# A live tombstone, FLAG_SHA256: nonce erased, kind bit set; a FORGOTTEN v2 lists it.
+# A live tombstone, FLAG_SHA256: nonce erased, kind bit set; a FORGOTTEN lists it.
 # Written by doc/spec/fixture_tests.rs (W-MG-FIX), BEBOP_RULE_FIXTURES=<dir>; deterministic.
 doc_n=4
 doc_root=2912520156778742020

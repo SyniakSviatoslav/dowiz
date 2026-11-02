@@ -44,7 +44,7 @@ impl SealedHub {
             body.extend_from_slice(encode(ev).as_bytes());
             let (nonce, derived) = self.entropy.nonce(&prev, &body);
             let payload = with_nonce(&nonce, &body);
-            let mut rec = Record { id: [0u8; 32], prev, actor_pubkey: key.id, actor_seq: seq, flags: flags_for(derived), payload };
+            let mut rec = Record { id: [0u8; 32], prev, actor_pubkey: key.id(), actor_seq: seq, flags: flags_for(derived), payload };
             rec.id = record_id(&rec);
             prev = rec.id;
             seq += 1;

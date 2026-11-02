@@ -430,7 +430,7 @@ already negotiates X25519MLKEM768 with modern browsers, and is Cloudflare's to c
 | Per-venue secrets at rest (eBills password, S3, Meta) | **AGAINST** | The Worker must *decrypt* them to use them, so the decryption key would live in the Worker beside the ciphertext; a KEM to a key the same process holds is symmetric encryption with a slower name. What protects those secrets is the object's isolation and the routes that never read them back — already the design |
 | Tokens | **No change** | HMAC-SHA256 is post-quantum as it stands; "PQ tokens" would be a claim with no adversary |
 | Customer ↔ hub end-to-end (tracking sheet, room) | **AGAINST, for now** | WebCrypto has no ML-KEM; it would mean the wasm module in every browser doing a KEM over a channel TLS already protects with the same hybrid. Re-entry: the offline/mesh transport (BLIND-SPOTS §2.11, `bebop-wasm`), where dowiz *is* the transport |
-| Code signing of the wasm / images | Later | `pq/codesign.rs`, `hybrid_signing.rs` exist (ML-DSA-65 is also ACVP-exact); a signed image is a different claim ("integrity"), and not the one the landing made |
+| Code signing of the wasm / images | Later | `pq/codesign.rs` exists (ML-DSA-65 is also ACVP-exact); `hybrid_signing.rs` also exists and must not be used, one signature gives up its secret; a signed image is a different claim ("integrity"), and not the one the landing made |
 
 ### 6.3 The construction, against the current standards
 

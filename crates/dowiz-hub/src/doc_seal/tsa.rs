@@ -11,14 +11,14 @@
 //! by a key the auditor did not bring is `Unchecked`, with the key's id so it can be
 //! brought; a mark that does not verify under a brought key is `Bad`.
 
-use bebop_store::evlog::doc::{Anchor, AnchorCheck, Verdict, KIND_PLATFORM_TSA};
-use dowiz_core::pq::dsa;
+use bebop_sig_mldsa::{PK_BYTES, SIG_BYTES};
+use bebop_store::evlog::doc::{Anchor, AnchorCheck, Signer, Verdict, KIND_PLATFORM_TSA};
 
 use super::{actor_id, DeviceKey, MlDsa65};
 use bebop_store::evlog::doc::Verifier;
 
 pub const ANCHOR_PREFIX: &[u8] = b"bebop-anchor/1";
-pub const MARK_BYTES: usize = dsa::PUBLICKEYBYTES + dsa::SIGNATUREBYTES;
+pub const MARK_BYTES: usize = PK_BYTES + SIG_BYTES;
 
 /// The bytes a mark signs.
 pub fn message(kind: i64, over: &[u8; 32], time_ms: i64) -> Vec<u8> {
@@ -35,7 +35,7 @@ pub fn message(kind: i64, over: &[u8; 32], time_ms: i64) -> Vec<u8> {
 pub fn mark(platform: &DeviceKey, over: &[u8; 32], time_ms: i64) -> Vec<u8> {
     let mut p = Vec::with_capacity(MARK_BYTES);
     p.extend_from_slice(platform.public_key());
-    p.extend_from_slice(&dsa::sign_internal_bytes(&platform.sk, &message(KIND_PLATFORM_TSA, over, time_ms), &[0u8; dsa::RNDBYTES]));
+    p.extend_from_slice(&platform.sign(&message(KIND_PLATFORM_TSA, over, time_ms)));
     p
 }
 
@@ -57,7 +57,7 @@ impl AnchorCheck for PlatformTsa<'_> {
         if a.proof.len() != MARK_BYTES {
             return Verdict::Bad(format!("a TSA mark is {MARK_BYTES} bytes; this one is {}", a.proof.len()));
         }
-        let (pk, sig) = a.proof.split_at(dsa::PUBLICKEYBYTES);
+        let (pk, sig) = a.proof.split_at(PK_BYTES);
         let id = actor_id(pk);
         if self.keys.is_empty() {
             return Verdict::Unchecked(format!("no platform key was given; the mark names key {}", hex8(&id)));

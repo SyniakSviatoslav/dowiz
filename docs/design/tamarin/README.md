@@ -6,17 +6,22 @@ genesis keys, records, SEAL, ADMIT, REVOKE, TRUNCATE over a SEG hash, FORGOTTEN,
 stolen non-root key. A root is stolen only where a lemma says so. It models
 `crates/bebop-log/src/doc` as it stood on 2026-11-01.
 
-**STATUS: NEVER PARSED, NEVER PROVED.** No Tamarin has run on this file, on the box or anywhere else
-that this tree records. Every "expected" below is a prediction by hand. The only check so far is a
-script counting brackets, comments, duplicate names and fact arities, which is not a parse, so a
-parse error is a likely first result. No lemma here says anything about the Rust.
+**STATUS: THIS MODEL HAS NEVER BEEN PARSED AND NEVER PROVED**, unless a later `tamarin.yml` run shows
+otherwise. As of 2026-11-01 the public API lists one run, 41302238312 on a7507f4c, with the old
+workflow, and it settled nothing: the install passed, the Prove step was cancelled after 9 minutes,
+the upload was skipped, and the job ended as failure. The reason for the cancel is not public (the
+annotation says only "The operation was canceled", and the log needs a login), and no output survives,
+so that run shows neither a parse nor a verdict. Tamarin has not run on the box. Every "expected" below
+is a prediction by hand. The only other check is a script counting brackets, comments, duplicate names
+and fact arities, which is not a parse, so a parse error is a likely first result. No lemma here says
+anything about the Rust.
 
 `.github/workflows/tamarin.yml` runs it on `ubuntu-24.04`, on `workflow_dispatch` and on a push to
-main touching this directory. It is separate from CI, so a red blocks no merge. Tamarin reports a
+main touching this directory, the workflow or `tools/gates/tamarin-verdicts.py`. It is separate from CI, so a red blocks no merge. Tamarin reports a
 falsified lemma in its output and not in its exit code, so `tools/gates/tamarin-verdicts.py` reads the
 summary after the prover: a lemma with no verdict is red, and a verdict that differs from
-`expected-verdicts.txt` is red. **That list does not exist yet, because no verdict has ever been
-produced**, so the step prints the verdicts and says they are compared with nothing. To pin them,
+`expected-verdicts.txt` is red. This form of the workflow has not run yet. **That list does not exist
+yet, because no verdict has ever been produced**, so the step prints the verdicts and says they are compared with nothing. To pin them,
 read the first real run against the table below, then commit the `tamarin.verdicts` file of the
 `tamarin-out` artifact as `expected-verdicts.txt`. Never write it from the table: the table is a prediction.
 Why not on the box: the arm64 bottle was unpacked, and running it through the dynamic loader was
@@ -47,11 +52,14 @@ is the attack.
 | Lim2 | `limit_merge_row_under_cut` | ATTACK: under a cut a MERGE row binds its seq and not its tip | verified = attack |
 | Lim3 | `limit_stolen_root` | ATTACK: a stolen root's own cut | verified = attack |
 
-**L3t is a new prediction, read from `count.rs`, not run on the Rust or the prover.** A tombstone's
+**L3t was read from `count.rs`, then run on the Rust on 2026-11-01 (`tam_l3t_` in `crates/bebop-log/src/doc/tam_tests.rs`, green); the verdict in the table is still a prediction for the prover.** A tombstone's
 `prev` sits under no id, so a forger with no key puts a forged TRUNCATE at seq `s` and tombstones the
 genuine `s+1` with `prev` on the forgery. Nothing forks, so the forgery is sound and the root's seal
-covers it, and status 75 becomes 0. `tombs_foreign` should keep `holds` false, so `holds` is not
-fooled: what falls is the refusal, for a caller that reads status alone. A REVOKE or ADMIT goes the same way.
+covers it, and status 75 becomes 0. `tombs_foreign` keeps `holds` false, so `holds` is not
+fooled: what falls is the refusal, for a caller that reads status alone. A REVOKE or ADMIT should go the same
+way; the tests build the TRUNCATE only. A forged FORGOTTEN does not close it: the tests try one under the
+tombstone and one above, and each leaves a stale digest or a stale link, and a control with the digest cut
+loose from `prev` holds on the same bytes. FORMAT §14 states it as a limit: a caller MUST read `holds`.
 
 ## How the fixes appear in the model
 
@@ -64,8 +72,8 @@ fooled: what falls is the refusal, for a caller that reads status alone. A REVOK
 | a chain ends at 0^32 or a frontier tip | `count.rs:176` | `V_first`, `V_first_cut`, `V_first_onto`, `V_first_onto_cut` are the only starts |
 | FORGOTTEN | `forgotten.rs` | `forgotten(id, digest)`, one row, by the author or a root |
 
-**There is no second FORGOTTEN mark.** `FORGOTTEN_MARK` is `bebop-forgotten/1`, and "FORGOTTEN v2" occurs
-only in the wording of one fixture. What that wording can mean is the body with `(id, digest)` rows, which is what is modelled.
+**There is no second FORGOTTEN mark.** `FORGOTTEN_MARK` is `bebop-forgotten/1`, and "FORGOTTEN v2" is wrong
+wording that survives in one journal line. What that wording can mean is the body with `(id, digest)` rows, which is what is modelled.
 
 Forks reach further than H3: neither record at a forked seq is sound, the honest one included. So at
 status 0 a forger with no key silences an honest REVOKE, or makes an honest TRUNCATE read as undeclared,

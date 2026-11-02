@@ -43,6 +43,8 @@ jobs:
             crates/bebop-log
             crates/bebop-io
             crates/bebop-store
+            crates/einfile-sync
+            crates/bebop-sig-mldsa
             crates/dowiz-core
             crates/dowiz-hub
             crates/bebop-wasm
@@ -86,8 +88,25 @@ jobs:
           for c in bebop-image bebop-kv bebop-log; do
             (cd crates/$c && cargo clippy --lib && cargo clippy --lib --features std) || exit 1
           done
+      - name: bebop-log with feature sync (the tail door, K-T1)
+        run: cd crates/bebop-log && sh ../../tools/gates/ci-annotate.inc bebop-log-sync cargo test --features sync
+      - name: einfile-sync (frames, sessions, the file transport, GRANT)
+        run: cd crates/einfile-sync && sh ../../tools/gates/ci-annotate.inc einfile-sync cargo test
+      - name: einfile-sync clippy
+        run: cd crates/einfile-sync && cargo clippy --all-targets -- -D warnings
       - name: bebop-store (the facade + the DAG runtime)
         run: cd crates/bebop-store && sh ../../tools/gates/ci-annotate.inc bebop-store cargo test
+      # W-MG-SIG: the seal's signature, the differential against dowiz-core's dsa, and its
+      # wasm32 build, since the Worker links it. No getrandom: this crate draws no randomness.
+      - name: bebop-sig-mldsa (ML-DSA-65 behind Signer and Verifier)
+        run: cd crates/bebop-sig-mldsa && sh ../../tools/gates/ci-annotate.inc bebop-sig-mldsa cargo test
+      - name: bebop-sig-mldsa clippy, wasm32, dependency gate
+        run: |
+          cd crates/bebop-sig-mldsa
+          cargo clippy --all-targets -- -D warnings
+          cargo build --target wasm32-unknown-unknown
+          bad=$(cargo tree -e no-dev --prefix none | awk '{print $1}' | sort -u | { grep -x -e getrandom -e dowiz-core || true; })
+          [ -z "$bad" ] || { echo "::error::bebop-sig-mldsa links: $bad"; exit 1; }
       - name: dowiz-core (the kernel)
         run: cd crates/dowiz-core && sh ../../tools/gates/ci-annotate.inc dowiz-core cargo test
       - name: dowiz-hub (one venue's images as pure logic)

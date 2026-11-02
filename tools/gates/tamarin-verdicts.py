@@ -11,7 +11,7 @@ exits 2: a parse error, or a prover that stopped early, has no summary to compar
 docs/design/tamarin/expected-verdicts.txt holds `lemma verdict` per line. WHILE IT IS ABSENT there
 is nothing to compare: the verdicts are printed, the run says so, and it exits 0. The list is never
 written by hand or from the README's table, which is a prediction: it is the `--write` file of a
-real run, the `tamarin-verdicts` artifact, committed after someone has read it.
+real run, `tamarin.verdicts` in the `tamarin-out` artifact, committed after someone has read it.
 
 Exit 0 green or no list yet; 1 a verdict moved; 2 no verdict for every lemma."""
 import os

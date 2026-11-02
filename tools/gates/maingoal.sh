@@ -36,7 +36,7 @@ PHONE="+355691111111"
 say() { echo "maingoal: $*"; }
 
 stamp_text() {
-  src=$(cd "$ROOT/crates" && find bebop-crc bebop-image bebop-kv bebop-log bebop-io bebop-store dowiz-core dowiz-hub \
+  src=$(cd "$ROOT/crates" && find bebop-crc bebop-image bebop-kv bebop-log bebop-io bebop-store bebop-sig-mldsa dowiz-core dowiz-hub \
     -type d -name target -prune -o -type f \( -name '*.rs' -o -name 'Cargo.toml' -o -name 'Cargo.lock' \) -print \
     | LC_ALL=C sort | xargs sha256sum | sha256sum | cut -d' ' -f1)
   bins=$(cd "$BIN" && sha256sum $BINS 2>/dev/null | sha256sum | cut -d' ' -f1)

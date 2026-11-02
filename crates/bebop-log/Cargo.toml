@@ -12,6 +12,9 @@ description = "The bebop chained event log over a bebop image: EvLog v1/v2 recor
 default = []
 # EvLog::init / append / set_tip over a path.
 std = ["bebop-image/std"]
+# `Doc::front`, `tail_of`, `tail_part`, `tail_into` for `einfile-sync`. Off by default: the reader
+# links this crate and must not grow by a byte for doors it never opens (tools/verify/bytes.baseline).
+sync = []
 
 [dependencies]
 bebop-image = { path = "../bebop-image", version = "0.1.0" }

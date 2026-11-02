@@ -55,6 +55,7 @@ for p in tools/gates/*.prove.sh; do
   # The Lean gate's proof rebuilds a scratch copy of bebop-lang/formal: its own CI job (`lean`).
   case "$p" in */lean.prove.sh) skip lean.prove "needs the Lean toolchain; its own CI job"; continue ;; esac
   case "$p" in */x86-check.prove.sh) [ $CARGO = 1 ] || { skip x86-check.prove "compiles Rust; pass --cargo"; continue; } ;; esac
+  case "$p" in */reader-repro.prove.sh) [ $CARGO = 1 ] || { skip reader-repro.prove "compiles Rust (wasm32); pass --cargo"; continue; } ;; esac
   run "$(basename "$p" .sh)" sh "$p"
 done
 for g in tools/gates/*.sh; do
@@ -65,6 +66,10 @@ for g in tools/gates/*.sh; do
     */flows.sh) skip flows "live browser gate; run by tools/deploy/deploy.sh after the upload"; continue ;;
     */vocab.sh)
       if [ $CARGO = 1 ]; then run vocab sh "$g"; else skip vocab "compiles Rust; pass --cargo"; fi
+      continue ;;
+    # The committed reader pin against what its source builds, two directories (W-MG-REPRO).
+    */reader-repro.sh)
+      if [ $CARGO = 1 ]; then run reader-repro sh "$g"; else skip reader-repro "compiles Rust (wasm32); pass --cargo"; fi
       continue ;;
     # The x86_64-only code (AVX2, SHA-NI, rdtsc) compiled on an aarch64 box: CI was red two days over
     # a const that only the x86 runner ever compiled (2026-10-06..08). Native x86_64 answers 0 at once.

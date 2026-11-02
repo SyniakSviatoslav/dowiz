@@ -1,0 +1,15 @@
+[package]
+name = "einfile-sync"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+repository = "https://github.com/SyniakSviatoslav/dowiz"
+readme = "README.md"
+description = "One sync session between two copies of a signed file: bytes in, bytes out. No I/O, no clock, no transport, no external crate. no_std + alloc."
+
+# Keep [dependencies] to these two (bebop-crc comes with bebop-image). A transport, a runtime, a
+# hash or a signature here is a defect: they arrive through the seams of `bebop-log::doc`.
+[dependencies]
+bebop-image = { path = "../bebop-image", version = "0.1.0" }
+bebop-log = { path = "../bebop-log", version = "0.1.0", features = ["sync"] }

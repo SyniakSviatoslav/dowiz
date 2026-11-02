@@ -10,7 +10,14 @@
 # lowered by hand in the commit that earns it. BWR_RATCHET=write records a build ABOVE it instead
 # of refusing -- for the commit that deliberately grows the reader (W-MG-M5: DOC, sha256, verify)
 # and says the new number in its message; never set it in a gate. The path is remapped to /dowiz
-# exactly as bebop-wasm/gate.sh does, so the count is the code's and not the checkout's.
+# exactly as bebop-wasm/gate.sh does, so no path is in the module.
+#
+# THE SAME SOURCE IS THE SAME BYTES, IN ANY DIRECTORY (W-MG-REPRO, 2026-11-01). The remap alone did not
+# do it: cargo hashes the absolute path of a path dependency into `-C metadata`, and that hash moved
+# function counts, sizes and the sha per checkout, so the sha read.mjs pins could be rebuilt by nobody.
+# RUSTC_WRAPPER=rustc-stable-id.sh fixes that one input. tools/gates/reader-repro.sh holds it: two
+# directories, one sha, and that sha is the committed pin. CARGO_ENCODED_RUSTFLAGS would silently win
+# over RUSTFLAGS and a second wrapper would stack on this one, so neither comes in from outside.
 #
 # THE .mjs IS GENERATED AND COMMITTED: run-all (no --cargo) and a CI job without a wasm32 toolchain
 # read it, and "one file, no npm" is the deliverable. This script says UNCHANGED or REWRITTEN so a
@@ -25,7 +32,7 @@ TARGET="${BWR_TARGET_DIR:-$C/target}"
 WASM="$TARGET/wasm32-unknown-unknown/release/bebop_wasm_reader.wasm"
 say() { echo "verify-build: $*"; }
 
-if ! (cd "$C" && CARGO_INCREMENTAL=0 RUSTFLAGS="--remap-path-prefix=$ROOT=/dowiz -C link-arg=--max-memory=1073741824" "$CARGO" build --release --target wasm32-unknown-unknown --offline --target-dir "$TARGET") > "$V/.build.log" 2>&1; then
+if ! (cd "$C" && unset CARGO_ENCODED_RUSTFLAGS RUSTC_WORKSPACE_WRAPPER; CARGO_INCREMENTAL=0 RUSTC_WRAPPER="$V/rustc-stable-id.sh" RUSTFLAGS="--remap-path-prefix=$ROOT=/dowiz -C link-arg=--max-memory=1073741824" "$CARGO" build --release --target wasm32-unknown-unknown --offline --target-dir "$TARGET") > "$V/.build.log" 2>&1; then
   say "RED wasm32 build failed rc=$? -- $(grep -m1 'error' "$V/.build.log")"; exit 1
 fi
 [ -f "$WASM" ] || { say "RED no module at $WASM"; exit 1; }

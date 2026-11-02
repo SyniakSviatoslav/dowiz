@@ -111,7 +111,7 @@ deploy, and corruption on the first grow. That is what the floor in §3 prevents
 
 Preconditions, all local: `cd crates/dowiz-hub && cargo test --lib` green; `cd workers/api && cargo test --lib`
 green; `bash tools/deploy/scheme-armed.sh` prints `0 unarmed`; `bash tools/deploy/rollback.test.sh` and
-`bash tools/deploy/test.sh` green; `sh crates/bebop-wasm/tablet.sh` run on the commit (`deploy.sh` refuses it otherwise, exit 15). `SHA256_VENUES = ""` in
+`bash tools/deploy/test.sh` green; `sh crates/bebop-wasm/tablet.sh` run on the commit (`deploy.sh` compares the source digest with `tablet.wasm.src` and refuses a difference, exit 15; equal digests say the `.src` file names these sources, not that the wasm bytes were built from them). `SHA256_VENUES = ""` in
 `workers/api/wrangler.toml`. Prod version id noted (`wrangler deployments status --json`; deploy.sh prints
 it as `serving now:`).
 

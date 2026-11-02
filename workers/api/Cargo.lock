@@ -118,6 +118,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "bebop-sig-mldsa"
+version = "0.1.0"
+dependencies = [
+ "bebop-log",
+ "fips204",
+ "sha2",
+]
+
+[[package]]
 name = "bebop-store"
 version = "0.1.0"
 dependencies = [
@@ -309,6 +318,7 @@ dependencies = [
 name = "dowiz-hub"
 version = "0.1.0"
 dependencies = [
+ "bebop-sig-mldsa",
  "bebop-store",
  "crc32fast",
  "dowiz-core",
@@ -367,6 +377,17 @@ checksum = "c0b50bfb653653f9ca9095b427bed08ab8d75a137839d9ad64eb11810d5b6393"
 dependencies = [
  "rand_core",
  "subtle",
+]
+
+[[package]]
+name = "fips204"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a823e139c2d539b1b735d31cdce8b0b356671585eac3d54dec79d1d15052093b"
+dependencies = [
+ "rand_core",
+ "sha3",
+ "zeroize",
 ]
 
 [[package]]
@@ -655,6 +676,15 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "keccak"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cb26cec98cce3a3d96cbb7bced3c4b16e3d13f27ec56dbd62cbc8f39cfb9d653"
+dependencies = [
+ "cpufeatures",
 ]
 
 [[package]]
@@ -947,6 +977,17 @@ dependencies = [
  "cfg-if",
  "cpufeatures",
  "digest",
+]
+
+[[package]]
+name = "sha3"
+version = "0.10.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77fd7028345d415a4034cf8777cd4f8ab1851274233b45f84e3d955502d93874"
+dependencies = [
+ "digest",
+ "keccak",
+ "zeroize",
 ]
 
 [[package]]
@@ -1310,6 +1351,20 @@ name = "zeroize"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13c156562582aa81c60cb29407084cdb54c4164760106ab78e6c5b0858cf64e"
+dependencies = [
+ "zeroize_derive",
+]
+
+[[package]]
+name = "zeroize_derive"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c50655cbb0fe3fc43170059e702f1ce5e19b84cec58dc87b037a09935c2f328"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
 
 [[package]]
 name = "zerotrie"

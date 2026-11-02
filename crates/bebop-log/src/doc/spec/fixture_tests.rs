@@ -218,7 +218,7 @@ pub(super) fn counts(st: &Store) -> crate::doc::Counters {
 
 #[test]
 fn rule_fixtures_tombstones_of_both_schemes() {
-    let st = doc_fixture("tomb-sha", "A live tombstone, FLAG_SHA256: nonce erased, kind bit set; a FORGOTTEN v2 lists it.", true, || tombstoned(false));
+    let st = doc_fixture("tomb-sha", "A live tombstone, FLAG_SHA256: nonce erased, kind bit set; a FORGOTTEN lists it.", true, || tombstoned(false));
     let c = counts(&st);
     assert_eq!((c.records, c.chained, c.legacy, c.redacted, c.broken, c.declared, c.tombs_foreign), (4, 3, 0, 1, 0, 1, 0), "{c:?}");
     let st = doc_fixture("tomb-legacy", "A live tombstone of a legacy record: no nonce, the kind byte's high bit is the mark.", true, || tombstoned(true));

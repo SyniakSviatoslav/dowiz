@@ -90,7 +90,7 @@ The adversary always holds the whole file and may rewrite every unsigned cell. U
 
 **`holds`** is the conjunction (`verify.rs:149`, FORMAT §9.4): `broken = 0`, `seals_bad = 0`, `forks = 0`, `seals_ok > 0`, `redacted + cut_redacted = declared`, `keys_disagree = 0`, `tombs_foreign = 0`, `unsealed = 0`, `merges_bad = 0`, `tree_unsigned = 0`. Under `Trust::Only`, that is: every record vouched for by an ok seal, every chain ending at `0^32` or a frontier tip, and no tree outside the signatures.
 
-- **`holds` is not status 0.** A file can open and print status 0 with `holds` false. A caller that reads the status alone gets less. `tombs_foreign`, `tree_unsigned`, `revokes_unsettled` and `admitted` are not in the printed line; four terms of `holds` cannot be read off it (FORMAT §9.4 "What is not in the line").
+- **`holds` is not status 0.** A file can open and print status 0 with `holds` false. A caller that reads the status alone gets less, and a forged TRUNCATE can sit there (FORMAT §14). `tombs_foreign`, `tree_unsigned`, `revokes_unsettled` and `admitted` are not in the printed line; four terms of `holds` cannot be read off it (FORMAT §9.4 "What is not in the line").
 - **Refusals.** Status 1, 2, 3, 4, 10, 12, 41, 75 for a read or `verify`; 76, 77, 78 for a host (FORMAT §9.0). A last-commit failure of bytes handed whole is a refusal, never a fallback (FORMAT §7).
 - **Bounds.** One walk bound `n`, the cells that arrived (§9.0). One `verify` holds at most 8 × the file size of heap above the image, and time is O(n log n) plus settle rounds × admission passes × distinct seals (§9.4 "Bounds of one `verify`"). A reader must not pad, panic, or allocate from an unbounded value (§1, §3.1).
 - **Erasure.** A tombstone erases the nonce, so a kept id does not confirm a guessed payload (§9.4, `atk4_nonce`).
@@ -100,7 +100,7 @@ The adversary always holds the whole file and may rewrite every unsigned cell. U
 
 ## 6. Every limit, by name
 
-**One file cannot decide these** (FORMAT §14, the sixteen entries as named there):
+**One file cannot decide these** (FORMAT §14, as named there; its seventeenth entry, "Status 0 is not `holds`", is below the table, so these numbers stay):
 
 | # | Limit | # | Limit |
 |---|---|---|---|
@@ -112,6 +112,8 @@ The adversary always holds the whole file and may rewrite every unsigned cell. U
 | L6 | Removing an anchor | L14 | A MERGE row or a REVOKE under a cut (fixes the seq, not the tip) |
 | L7 | Swapping files of one owner | L15 | What a MERGE saw |
 | L8 | Order across devices | L16 | After a rotation |
+
+Also in FORMAT §14: **Status 0 is not `holds`.** A forged TRUNCATE can sit at status 0 through a tombstone's unbound `prev`, with `holds` false. It is the model's trace L3t, and `tam_l3t_` in `crates/bebop-log/src/doc/tam_tests.rs` builds it.
 
 L9 matters most for a first read: "Live data is all legacy, so a `seal_hub` of a real venue is exposed on its pre-seal records until those records leave the file", and FNV preimages are untested. L2 and L3 are theorems of the model (`DocLimits.rollback_holds`, `no_file_check_sees_rollback`).
 
@@ -183,10 +185,10 @@ By title only, from FORMAT §14. No test exists for any. Please treat them as fi
 **How the seal uses them.**
 
 - `MlDsa65` and `DeviceKey` live in `crates/dowiz-hub/src/doc_seal.rs`; the crates `bebop-log` and `bebop-wasm-reader` hold no signature code (`doc/seams.rs`). `dowiz-core` is a dev-dependency of `bebop-log` only.
-- Seals use `Sign_internal` / `Verify_internal` directly, **without the FIPS 204 context prefix**, with `rnd = 0^32` (FORMAT §9.4, `doc_seal.rs:164`). A library offering only the outer interface signs a different message.
+- Seals are external pure ML-DSA-65 with an empty context, `M' = 00 00 ‖ msg`, `rnd = 0^32` (FORMAT §9.4). Any FIPS 204 library's outer interface produces and checks them.
 - The `alg` registry has one entry, 65. Any other number or length does not verify. Messages carry ASCII tags: `bebop-seal/1`, `bebop-anchor/1`. Records: `bebop-record/1`. Segments: `bebop-seg/1`.
 
-**What `hybrid_signing` was.** `crates/dowiz-core/src/pq/hybrid_signing.rs` is still in the tree and is **not** a usable scheme. Its header calls it Ed25519 + ML-DSA-65 + SLH-DSA. By its own code the classical leg is not Ed25519: `classical_sign` is `sig = secret XOR H(DOMAIN_SIG || msg)` (`:290-295`), so one signature gives up its secret, as `classical_verify` itself shows (`:312-330`), and `doc_seal.rs:8` says so. The "SLH-DSA" leg is a domain-separated ML-DSA stub, by its header. `doc_seal.rs` and `doc_seal/history.rs` forbid it for seals. It remains reachable from `crates/dowiz-core/src/ports/agent/cap.rs` (`HybridPolicy`) and `kernel/src/pq/mod.rs`; those callers were not audited here.
+**What `hybrid_signing` was.** `crates/dowiz-core/src/pq/hybrid_signing.rs` is still in the tree and is **not** a usable scheme. Its header calls it Ed25519 + ML-DSA-65 + SLH-DSA. By its own code the classical leg is not Ed25519: `classical_sign` is `sig = secret XOR H(DOMAIN_SIG || msg)` (`:295-310`), so one signature gives up its secret, as `classical_verify` itself shows (`:314`), and `doc_seal.rs:8` says so. The "SLH-DSA" leg is a domain-separated ML-DSA stub, by its header. `doc_seal.rs` and `doc_seal/history.rs` forbid it for seals. It remains reachable from `crates/dowiz-core/src/ports/agent/cap.rs` (`HybridPolicy`) and `kernel/src/pq/mod.rs`; those callers were not audited here.
 
 **Separate question, pending.** A provenance study of whether to replace our ML-DSA (lane W-MG-PQ, planned as docs/research/R-MLDSA-PROVENANCE.md) was commissioned and that report is not in the tree at the time of writing. Seals are unreleased, so a change is free now and not after the first release [lane record].
 
@@ -199,8 +201,8 @@ By title only, from FORMAT §14. No test exists for any. Please treat them as fi
 | File | Theorems |
 |---|---|
 | `DocLog.lean` | `signed_for`, `reach_own_chain`, `signed_for_honest`, `signer_saw`, `holds_gives`, `admission_signed`, `chain_ends` |
-| `DocMerge.lean` | `union_chain`, `union_holds`, `fork_breaks_union`, `merged_holds_iff`, `merges_iff`, `union_keeps`, `union_comm_front`, `union_assoc_front`, `union_idem_front` |
-| `DocLimits.lean` | `rollback_holds`, `no_file_check_sees_rollback`, `rollback_hides_revoke`, `past_revoke_blocks_union`, `unsealed_prefix_fails`, `union_holds_side_does_not`, `ring_holds`; fixtures `fOne_holds`, `fTwo_holds`, `fRevoked_holds` show `Holds` is inhabited |
+| `DocMerge.lean` | `union_chain`, `union_holds`, `fork_breaks_union`, `merged_holds_iff`, `merges_iff`, `union_keeps`, `union_comm_front`, `union_assoc_front`, `union_idem_front`, `last_verify_is_collision`, `union_nothing_new`, `union_front_max` |
+| `DocLimits.lean` | `rollback_holds`, `no_file_check_sees_rollback`, `rollback_hides_revoke`, `past_revoke_blocks_union`, `unsealed_prefix_fails`, `union_holds_side_does_not`, `ring_refused`; fixtures `fOne_holds`, `fTwo_holds`, `fRevoked_holds` show `Holds` is inhabited |
 | `Merkle.lean` | 8 theorems; the hash is a parameter, collision resistance a hypothesis `hinj` |
 | `Sync.lean` | 35 theorems, including a frontier section |
 | `Sha256.lean` | no theorems: it computes digests for the `cas://` form, and is unrelated to a security claim |
@@ -211,10 +213,10 @@ The Doc files state no `axiom` and no `sorry`. `tools/gates/lean.sh` enforces th
 
 ### Tamarin (`docs/design/tamarin/bebop_seal.spthy`, `README.md`)
 
-**Status: never parsed, never proved.** README: "THE MODEL HAS NEVER BEEN PARSED OR PROVED." Every "EXPECTED" is a prediction by hand; "A parse error is the likely first result of the first real run". The prover was unpacked on the development box and running it was refused there.
+**Status: never parsed, never proved, unless a later run shows otherwise.** Every "expected" is a prediction by hand, and a parse error is a likely first result (README). The prover was unpacked on the development box and running it was refused there.
 
-- `.github/workflows/tamarin.yml` exists in this tree, though README still says the job was "NOT added". It is separate from CI and blocks nothing. **Whether it has ever run, and with what result, could not be established**; no output is in the tree.
-- **The model predates the fixes.** It has `revoke(b, %k)` with no tip (`:91-96`) and lets any admitted key's TRUNCATE satisfy `truncate_declared` (`:34-37`). The Rust now names a tip and requires a root (FORMAT §9.4, `declare.rs:97`). So README's "FALSIFIED" column for L2t and L5, and its "The four holes" text with its line numbers, describe a past state. L3s and L4c need the same review. Update before relying on any verdict.
+- `.github/workflows/tamarin.yml` is separate from CI and blocks nothing. One run exists, 41302238312 on a7507f4c (2026-11-01, the old workflow): the Prove step was cancelled after 9 minutes, the reason is not public, and no output survives, so it shows neither a parse nor a verdict.
+- **The model carries the fixes.** The second pass has `revoke/3` with a tip and root-only `truncate_declared` (README, "How the fixes appear in the model"). It adds a prediction run on the Rust (`tam_l3t_`) and not yet on the prover: L3t, a forged TRUNCATE at status 0 through a tombstone's unbound `prev`, with `holds` false (FORMAT §14).
 - A verified lemma could not cover: legacy records, keyless actors, blind readers, anchors and time, sums, byte parsing (ambiguity between bodies is excluded by free constructors, so "no confusion attack can appear"). ML-DSA is a perfect signature and sha256 a perfect hash there (README, "What the model leaves out"). The limit lemmas `limit_rollback` and `limit_stolen_root` read inverted: "verified" means the attack exists.
 
 ## 11. Reproducing everything
@@ -292,7 +294,6 @@ Stale at the time of writing; the code and FORMAT rule.
 
 | Where | Says | True |
 |---|---|---|
-| `docs/design/tamarin/README.md` | job not added; H1-H4 as live | workflow exists; H1-H3 closed, H4 a limit (§7) |
 | `crates/bebop-wasm-reader/src/sha256.rs` header | `id = sha256(prev ‖ payload)` | id v2, `doc::id_message` |
 | `docs/research/R-MAINGOAL-A.md` | DOC of 8 cells, `seq` scheme, sizes | dated 2026-10-30, a design: FORMAT §9.4 rules |
 | `docs/design/MIGRATION-sha256-ids.md` status | prod at `ac5ff0c4` | dated 2026-10-31; ask for the current state |

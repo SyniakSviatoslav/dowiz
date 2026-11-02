@@ -4,12 +4,14 @@
 //!   * `HubIds`   -- how a record's id is derived: `chain_id` (sha256 over
 //!                   `doc::id_message`), the two FNV schemes of old images as LEGACY, the redaction
 //!                   mark of `forget.rs`, and the body behind M0's nonce and the kind byte;
-//!   * `MlDsa65`  -- the verifier: ML-DSA-65 (FIPS 204) from `dowiz_core::pq::dsa`, alg 65,
-//!                   pk 1 952 B, sig 3 309 B. NEVER `pq::hybrid_signing` (memory
-//!                   `pq-hybrid-signing-leaks-key.md`: one signature recovers its secret);
-//!   * `DeviceKey` -- the signer: one ML-DSA-65 key per device, `actor_id = sha256(pk)`,
-//!                   deterministic signing (`rnd = 0^32`) as the published price root is signed
-//!                   (`workers/api/src/hubdo/publish/root.rs`);
+//!   * `MlDsa65`  -- the verifier: ML-DSA-65 (FIPS 204) from the `bebop-sig-mldsa` crate, alg 65,
+//!                   pk 1 952 B, sig 3 309 B, external pure with the empty context (FORMAT
+//!                   §9.4). NEVER `pq::hybrid_signing` (memory `pq-hybrid-signing-leaks-key.md`:
+//!                   one signature recovers its secret);
+//!   * `DeviceKey` -- the signer, from the same crate: one ML-DSA-65 key per device,
+//!                   `actor_id = sha256(pk)`, deterministic signing (`rnd = 0^32`). The price
+//!                   root is a different object on a different interface
+//!                   (`workers/api/src/hubdo/publish/root.rs`: `Sign_internal`);
 //!
 //! and `SealedHub`, A HUB IMAGE UNDER A DOC ROOT. "A hub commit seals its tip": `append` is
 //! ONE record and ONE seal in one transaction (`Doc::commit_bytes`), so no generation holds
@@ -30,10 +32,9 @@
 //! that the event happened, that a quantity is true, or that `claimed_ms` is right. The
 //! anchors (`tsa.rs`, `ots.rs`, `roughtime.rs`) are the time half.
 
-use bebop_store::evlog::doc::{Ids, Key, Signer, Verifier, ALG_ML_DSA_65};
+use bebop_store::evlog::doc::Ids;
 use bebop_store::evlog::{Record, FLAG_SHA256};
 use bebop_store::merkle;
-use dowiz_core::pq::dsa;
 
 use crate::chain::{legacy_scheme, record_id, NONCE_LEN};
 use crate::forget::REDACTED_BIT;
@@ -54,12 +55,11 @@ pub use stock::KIND_STOCK;
 mod tests;
 #[cfg(test)]
 mod cut_tests;
-
-/// `actor_id` of a public key: sha256 over its bytes (R-MAINGOAL-A §1.1; the convention is
-/// this crate's, the MIT crate never derives it).
-pub fn actor_id(pk: &[u8]) -> [u8; 32] {
-    bebop_store::nodekey::sha256(pk)
-}
+#[cfg(test)]
+mod sig_tests;
+// `actor_id` is sha256 over a public key (R-MAINGOAL-A §1.1): the convention belongs to the
+// signature crate, `bebop-log` never derives it.
+pub use bebop_sig_mldsa::{actor_id, DeviceKey, MlDsa65};
 
 /// How this crate's records are named: M0's scheme, the legacy schemes, the redaction mark,
 /// the framing. Every answer is `chain::scheme`'s, called -- nothing re-derived here.
@@ -107,64 +107,6 @@ fn after_nonce(flags: i64, payload: &[u8]) -> &[u8] {
         payload
     }
 }
-
-/// ML-DSA-65 as the DOC's `Verifier`. An algorithm number other than 65, or a key or a
-/// signature of the wrong length, is `false`: never a guess at another scheme.
-pub struct MlDsa65;
-
-impl Verifier for MlDsa65 {
-    fn verify(&self, alg: i64, pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
-        alg == ALG_ML_DSA_65 && pk.len() == dsa::PUBLICKEYBYTES && sig.len() == dsa::SIGNATUREBYTES && dsa::verify_internal_bytes(pk, msg, sig)
-    }
-    fn actor_of(&self, pk: &[u8]) -> Option<[u8; 32]> {
-        Some(actor_id(pk))
-    }
-}
-
-/// One device's ML-DSA-65 key, derived from a 32-byte seed (FIPS 204 `KeyGen`); the seed is
-/// what a device keeps, as `VENUE_SIGN_SK` is a seed. The platform's own key for the TSA
-/// mark is the same type (`tsa::mark`).
-pub struct DeviceKey {
-    pk: Vec<u8>,
-    sk: Vec<u8>,
-    id: [u8; 32],
-}
-
-impl DeviceKey {
-    pub fn from_seed(seed: &[u8; dsa::SEEDBYTES]) -> Self {
-        let (pk, sk) = dsa::keygen_bytes(seed);
-        let id = actor_id(&pk);
-        DeviceKey { pk, sk, id }
-    }
-    pub fn public_key(&self) -> &[u8] {
-        &self.pk
-    }
-    pub fn id(&self) -> [u8; 32] {
-        self.id
-    }
-    /// The KEYS row for this key, as a genesis key (`admit_rec` = none).
-    pub fn key(&self) -> Key {
-        Key { actor_id: self.id, alg: ALG_ML_DSA_65, valid_from: 0, revoked_at: 0, admit_rec: None, pk: self.pk.clone() }
-    }
-}
-
-impl Signer for DeviceKey {
-    fn actor_id(&self) -> [u8; 32] {
-        self.id
-    }
-    fn alg(&self) -> i64 {
-        ALG_ML_DSA_65
-    }
-    fn public_key(&self) -> Vec<u8> {
-        self.pk.clone()
-    }
-    /// Deterministic: `rnd = 0^32`. A device has no entropy to spend on a signature it can
-    /// make without one, and two signings of one message are then one signature.
-    fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        dsa::sign_internal_bytes(&self.sk, msg, &[0u8; dsa::RNDBYTES])
-    }
-}
-
 
 /// `Hub`-style hex of an id (`chain::hex32`), for the CLI and the tests.
 pub fn hex32(b: &[u8; 32]) -> String {

@@ -259,7 +259,7 @@ lemma truncate_status_was_signed_no_tomb:
   "All v S #h #i. Accept(v, 'status')@h & NeedsTruncate(v, S)@i & not (Ex r #s. StolenRoot(r)@s)
      & not (Ex a %s id x #t. Tomb(v, a, %s, id, x)@t)
      ==> Ex a #j. TruncateWritten(a, S)@j"
-/* L3t, status 0 alone. EXPECTED FALSIFIED, by reading count.rs, and no trace of it has run: a tombstone's
+/* L3t, status 0 alone. EXPECTED FALSIFIED; the Rust trace runs in tam_tests.rs (tam_l3t_): a tombstone's
    prev is under no id. Forged record at seq s, the genuine s+1 tombstoned with prev on the forgery: no
    fork, so sound; the root's seal covers s; 75 becomes 0. tombs_foreign keeps holds false. */
 lemma truncate_status_was_signed:

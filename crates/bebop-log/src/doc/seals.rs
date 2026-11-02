@@ -69,7 +69,9 @@ pub(super) fn load(st: &Store, heads: &[Head], fr: &Frontiers, budget: &mut Budg
                 .and_then(|p| index.get(&at_key(p)))
                 .and_then(|i| all.get(*i as usize))
                 .map(|p| p.seal.tip)
-                .or_else(|| fr.at(&s.actor_id, s.seq.wrapping_sub(1)).map(|f| f.tip))
+                // The frontier row sits on a seal's edge (`CutInsideSeal`), and the oldest kept seal may
+                // be a sync of many records, so its row is not always at `seq - 1`.
+                .or_else(|| fr.of_actor(&s.actor_id).filter(|f| f.seq < s.seq).map(|f| f.tip))
                 .unwrap_or([0u8; 32])
         })
         .collect();

@@ -162,7 +162,7 @@ The most valuable X that is one operator action away is **the off-site copies** 
 | 1 | **F16** (OA-3, operator) | `tools/seal-open keygen` off-platform, `wrangler secret put BACKUP_SEAL_PK`, deploy, wait one 03:17Z | `/api/owner/health → backup.seal.sealed == true`; bucket lists `…json.gz.sealed`; `tools/seal-open open` yields a gzip `gunzip -t` accepts; the `cloud.seal` loud line stops | 0.5 lane-day + one night |
 | 2 | **F15** | X-Wing-exact combiner, dwzseal v2 (v1 still readable), vendored X-Wing vectors | `cargo test --offline pq::hybrid` byte-exact on every vector; v1 fixture opens; flipped header byte refused | 2-3 lane-days |
 | 3 | **F17** | README Security + landing: the qualified seal sentence only | `grep -rn "post-quantum" README.md workers/api/public/platform` shows only the qualified sentence | 0.5 lane-day |
-| 4 | **SEL4-4** | `actor_pubkey` filled on every append (`hubdo.rs:513`, `hubdo/print.rs:97`, hub `logimage.rs`), nightly verifies the chain; ML-DSA-65 or hybrid_signing | an append with zero `actor_pubkey` refused on a fixture that requires signing; nightly reports `chain.signed == true` | 4-6 lane-days |
+| 4 | **SEL4-4** | `actor_pubkey` filled on every append (`hubdo.rs:513`, `hubdo/print.rs:97`, hub `logimage.rs`), nightly verifies the chain; ML-DSA-65 only (corrected 2026-11-01: this row also offered `hybrid_signing`, which leaks its key) | an append with zero `actor_pubkey` refused on a fixture that requires signing; nightly reports `chain.signed == true` | 4-6 lane-days |
 
 Order 0 → 1 → 3 (truthful claim about the seal within two days), then 2 and 4. Step 0 is independent of every other lane's files and should go first.
 

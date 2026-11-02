@@ -210,8 +210,8 @@ same sentence. **Phase E1**, not before D.
 1. **The brand is an object, not a tenant of tenants.** A brand principal owns a `__brand:<id>`-style
    object (the `__platform` precedent: two underscores cannot be a venue) holding a **signed catalogue
    bundle** — items, base prices, allergens, photos' content ids — and the roster of venues that
-   carry it. Signing is the hybrid policy already wired for capability chains
-   (`DECISIONS.md` D4 audit line: `HybridSignPolicy` in cap-chain verification).
+   carry it. Signing is ML-DSA-65 only. This line used to name the hybrid policy of
+   `pq::hybrid_signing`; that module gives up its secret after one signature (`DECISIONS.md` D4 audit line).
 2. **A venue adopts a bundle by import, never by push.** The bundle arrives through the same pure
    `import.rs` path and the same dry run the owner already uses for a CSV. The venue's catalogue keeps
    `brand_ref = (bundle digest, item id)` on each adopted line and **its own price**, which is B3's

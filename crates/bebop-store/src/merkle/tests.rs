@@ -164,10 +164,10 @@ fn proof_size_by_catalogue_size() {
 #[test]
 fn the_signed_message_names_every_input() {
     let r = root(&hashes(&catalog(3)));
-    let m = signed_message(b"dubin", 4, 3, &r);
-    assert_ne!(m, signed_message(b"dubin", 5, 3, &r), "generation");
-    assert_ne!(m, signed_message(b"dubim", 4, 3, &r), "slug");
-    assert_ne!(m, signed_message(b"dubin", 4, 4, &r), "count");
+    let m = signed_message(b"tidal", 4, 3, &r);
+    assert_ne!(m, signed_message(b"tidal", 5, 3, &r), "generation");
+    assert_ne!(m, signed_message(b"tidam", 4, 3, &r), "slug");
+    assert_ne!(m, signed_message(b"tidal", 4, 4, &r), "count");
 }
 
 /// Benchmarks (AC-LV-PCD-01: root over 165 <= 20 us, verify <= 10 us). Printed, not asserted: a

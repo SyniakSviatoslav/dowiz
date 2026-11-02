@@ -22,6 +22,7 @@ updates:
       - /crates/bebop-log
       - /crates/bebop-io
       - /crates/bebop-store
+      - /crates/bebop-sig-mldsa
       - /crates/bebop-wasm
       - /workers/api
       - /tools/gen-vocab

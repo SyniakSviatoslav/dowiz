@@ -49,12 +49,14 @@ pub use bebop_image::verify::BadCrc;
 
 pub mod anch;
 mod budget;
+#[cfg(any(test, feature = "sync"))] mod clip;
 #[cfg(test)] mod tam_tests;
 mod copy;
 mod count;
 mod cut;
 mod declare;
 mod forgotten;
+#[cfg(any(test, feature = "sync"))] mod front;
 mod frontier;
 pub mod keys;
 mod merge;
@@ -65,9 +67,11 @@ pub mod seg;
 mod seams;
 mod settle;
 pub mod spec;
+#[cfg(any(test, feature = "sync"))] mod tail;
 mod verify;
 mod write;
 pub use anch::{check_anchors, Anchor, AnchorCheck, AnchorCounts, Checked, Verdict, KIND_OTS, KIND_PLATFORM_TSA, KIND_ROUGHTIME};
+#[cfg(any(test, feature = "sync"))] pub use front::{Front, Limits, Place, Tail};
 pub use keys::{Key, KeyOp, ALG_ML_DSA_65};
 pub use merge::Union;
 pub use merge_body::{merge_body, parse_merge, MergeView, Row, MERGE_MARK, STATE_COMMUTES, STATE_OBSTRUCTED};
@@ -291,10 +295,6 @@ pub(crate) fn cells_of(st: &Store, obj: usize, at: usize, n: usize) -> Vec<i64> 
     let have = st.obj_cells(obj).saturating_sub(at).min(n);
     (0..have).map(|i| st.get(obj, at + i)).collect()
 }
-
-#[cfg(test)]
-mod tests;
-#[cfg(test)]
-mod dsa_tests;
-#[cfg(test)]
-mod lean_tests;
+#[cfg(test)] mod tests;
+#[cfg(test)] mod dsa_tests;
+#[cfg(test)] mod lean_tests;

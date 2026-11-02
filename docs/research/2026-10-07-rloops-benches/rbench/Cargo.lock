@@ -3,8 +3,47 @@
 version = 4
 
 [[package]]
+name = "bebop-crc"
+version = "0.1.0"
+
+[[package]]
+name = "bebop-image"
+version = "0.1.0"
+dependencies = [
+ "bebop-crc",
+]
+
+[[package]]
+name = "bebop-io"
+version = "0.1.0"
+dependencies = [
+ "bebop-image",
+ "bebop-kv",
+]
+
+[[package]]
+name = "bebop-kv"
+version = "0.1.0"
+dependencies = [
+ "bebop-image",
+]
+
+[[package]]
+name = "bebop-log"
+version = "0.1.0"
+dependencies = [
+ "bebop-image",
+]
+
+[[package]]
 name = "bebop-store"
 version = "0.1.0"
+dependencies = [
+ "bebop-image",
+ "bebop-io",
+ "bebop-kv",
+ "bebop-log",
+]
 
 [[package]]
 name = "block-buffer"
@@ -28,6 +67,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "crc32fast"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9481c1c90cbf2ac953f07c8d4a58aa3945c425b7185c9154d67a65e4230da511"
+dependencies = [
+ "cfg-if",
 ]
 
 [[package]]
@@ -59,7 +107,9 @@ name = "dowiz-hub"
 version = "0.1.0"
 dependencies = [
  "bebop-store",
+ "crc32fast",
  "dowiz-core",
+ "lz4_flex",
  "serde",
  "serde_json",
  "sha2",
@@ -86,6 +136,12 @@ name = "libc"
 version = "0.2.189"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
+
+[[package]]
+name = "lz4_flex"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ecbdfe44b1bd960b68170b417450a628c43f7cf56bb3c5317e61cb230ee7f226"
 
 [[package]]
 name = "matchit"

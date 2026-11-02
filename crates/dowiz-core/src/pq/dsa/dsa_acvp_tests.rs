@@ -1,9 +1,10 @@
 //! NIST ACVP FIPS204 ML-DSA-65 byte-exact property-gate.
 //!
 //! Parses the vendored official NIST ACVP known-answer vectors
-//! (`bebop2/core/kat/acvp/{key-gen,sig-gen,sig-ver}.json`, vsId 42,
-//! revision FIPS204, isSample=false) — the canonical NIST ACVP-Server export
-//! mirrored by RustCrypto/signatures `ml-dsa/tests` — and asserts byte-exact
+//! (`src/pq/kat/acvp/{key-gen,sig-gen,sig-ver}.json`, vsId 42, revision FIPS204;
+//! `sig-gen.json` says isSample=true: a narrow snapshot mirrored by
+//! RustCrypto/signatures `ml-dsa/tests`, and INTERNAL interface only; the external
+//! group is `dsa_acvp_external_tests.rs`) — and asserts byte-exact
 //! agreement with the from-scratch implementation in `pq_dsa`:
 //!
 //!   * keyGen — `keygen_bytes(seed)` pk AND sk must equal the expected bytes.

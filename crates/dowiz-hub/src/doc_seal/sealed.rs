@@ -142,7 +142,7 @@ impl SealedHub {
     /// The device's next seq: one past its HEADS row, 1 for its first commit.
     pub fn next_seq(&self, key: &DeviceKey) -> u64 {
         let heads = Doc::open(&self.store).ok().and_then(|v| v.heads);
-        read_heads(&self.store, heads).iter().find(|h| h.actor_id == key.id).map_or(1, |h| h.seq + 1)
+        read_heads(&self.store, heads).iter().find(|h| h.actor_id == key.id()).map_or(1, |h| h.seq + 1)
     }
 
     /// ONE HUB COMMIT: the order event appended (M0's nonce and sha256 id, the device as
@@ -177,11 +177,11 @@ impl SealedHub {
     /// chains onto the pre-seal records), else 0^32. One device: the log's tip, as before.
     pub(super) fn device_prev(&self, key: &DeviceKey) -> [u8; 32] {
         let view = Doc::open(&self.store).ok();
-        if let Some(h) = read_heads(&self.store, view.as_ref().and_then(|v| v.heads)).iter().find(|h| h.actor_id == key.id) {
+        if let Some(h) = read_heads(&self.store, view.as_ref().and_then(|v| v.heads)).iter().find(|h| h.actor_id == key.id()) {
             return h.tip;
         }
         let segs = view.as_ref().and_then(|v| read_segs(&self.store, v.seg, EvLog::step_cap(&self.store)).ok()).unwrap_or_default();
-        if let Some(f) = frontier_of(&segs, &key.id) {
+        if let Some(f) = frontier_of(&segs, &key.id()) {
             return f.tip;
         }
         self.tip().unwrap_or([0u8; 32])
@@ -191,7 +191,7 @@ impl SealedHub {
         let prev = self.device_prev(key);
         let (nonce, derived) = self.entropy.nonce(&prev, &body);
         let payload = with_nonce(&nonce, &body);
-        let mut rec = Record { id: [0u8; 32], prev, actor_pubkey: key.id, actor_seq: self.next_seq(key), flags: flags_for(derived), payload };
+        let mut rec = Record { id: [0u8; 32], prev, actor_pubkey: key.id(), actor_seq: self.next_seq(key), flags: flags_for(derived), payload };
         rec.id = record_id(&rec);
         match Doc::commit_bytes(&mut self.store, &rec, key, claimed_ms, op) {
             Ok(gen) => Ok(gen),

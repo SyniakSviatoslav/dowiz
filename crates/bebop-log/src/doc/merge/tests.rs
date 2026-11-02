@@ -128,3 +128,95 @@ fn one_seal_per_sync_covers_every_record_under_it() {
     wrong.actor_seq += 1;
     assert_eq!(Doc::commit_many_bytes(&mut sa, &[wrong], &a.s, 6), Err(DocError::Seq { want: 5, got: 6 }));
 }
+
+// A cut can take a genesis device's whole history: only a second genesis key can lose it
+// (`CutsAdmit` protects an admitted one, the signing root keeps a seal). Its HEADS row has no seal
+// and the union must keep it, or the device is told seq 1 and its next commit breaks the file.
+/// B (genesis) writes twice, A (genesis) twice, the cut takes exactly B's records, A declares it.
+/// Returns (the cut file, a copy where A wrote once more, B's frontier tip).
+fn whole_history_gone() -> (Store, Store, [u8; 32]) {
+    let mut st = Store::create_bytes(1 << 20).unwrap();
+    let mut a = Dev::new(ToySigner { id: [0xA1; 32] });
+    let mut b = Dev::new(ToySigner { id: [0xB2; 32] });
+    Doc::init_bytes(&mut st, 0, &[key_of(&a.s), key_of(&b.s)]).unwrap();
+    b.commit(&mut st, b"b-1", None).unwrap();
+    b.commit(&mut st, b"b-2", None).unwrap();
+    a.commit(&mut st, b"a-1", None).unwrap();
+    a.commit(&mut st, b"a-2", None).unwrap();
+    let mut cut = Store::create_bytes(1 << 20).unwrap();
+    let seg = Doc::cut_into(&st, &mut cut, 2, &ToyIds).unwrap();
+    assert_eq!((seg.frontier.len(), seg.frontier[0].actor_id, seg.frontier[0].seq), (1, b.s.id, 2), "the cut took B's whole history and nothing of A's");
+    a.commit(&mut cut, &seg.truncate_body(), None).unwrap();
+    let r = counts(&cut);
+    assert!(r.holds(), "the cut file holds: {:?}", r.counters);
+    let row = r.heads.iter().find(|h| h.actor_id == b.s.id).copied().expect("the cut keeps B's row");
+    assert_eq!((row.seq, row.tip, row.seal), (2, b.tip, None), "a row with no kept seal");
+    let mut theirs = Store::from_bytes(&cut.to_bytes());
+    a.commit(&mut theirs, b"a-3", None).unwrap();
+    (cut, theirs, b.tip)
+}
+
+/// B's device placed on `st` by the hub's rules: `SealedHub::next_seq` (one past the row, 1 with no
+/// row) and `device_prev` (the row's tip, else the frontier row's). `commit` then adds one to `seq`.
+fn as_the_hub(st: &Store, frontier_tip: [u8; 32]) -> Dev<ToySigner> {
+    let mut d = Dev::new(ToySigner { id: [0xB2; 32] });
+    let row = counts(st).heads.iter().find(|h| h.actor_id == d.s.id).copied();
+    d.seq = row.map_or(0, |h| h.seq);
+    d.tip = row.map_or(frontier_tip, |h| h.tip);
+    d
+}
+
+/// B at its true position: past its own second record, whatever the file's HEADS say.
+fn at_its_own_place(frontier_tip: [u8; 32]) -> Dev<ToySigner> {
+    let mut d = Dev::new(ToySigner { id: [0xB2; 32] });
+    d.seq = 2;
+    d.tip = frontier_tip;
+    d
+}
+
+#[test]
+fn with_no_merge_a_device_past_the_cut_commits_and_the_file_holds() {
+    let (cut, _, tip) = whole_history_gone();
+    let mut st = Store::from_bytes(&cut.to_bytes());
+    let mut b = as_the_hub(&st, tip);
+    assert_eq!(b.seq, 2, "the cut file has B's row");
+    b.commit(&mut st, b"b-3", None).unwrap();
+    let r = counts(&st);
+    assert!(r.holds(), "control: {:?}", r.counters);
+}
+
+#[test]
+fn a_union_keeps_the_row_of_a_device_with_no_kept_seal() {
+    let (cut, theirs, tip) = whole_history_gone();
+    let (u, found) = merged(&cut, &theirs).unwrap();
+    assert!(found.wrote);
+    let r = counts(&u);
+    assert!(r.holds(), "{:?}", r.counters);
+    let row = r.heads.iter().find(|h| h.actor_id == [0xB2; 32]).copied();
+    assert_eq!(row.map(|h| (h.seq, h.tip)), Some((2, tip)), "B's HEADS row after the union");
+}
+
+#[test]
+fn a_device_with_no_kept_seal_goes_on_from_its_own_place_after_a_union() {
+    let (cut, theirs, tip) = whole_history_gone();
+    let (mut u, _) = merged(&cut, &theirs).unwrap();
+    let mut b = at_its_own_place(tip);
+    let out = b.commit(&mut u, b"b-3", None);
+    let r = counts(&u);
+    assert!(out.is_ok(), "seq 3 on prev tip: {out:?}");
+    assert!(r.holds(), "{:?}", r.counters);
+}
+
+#[test]
+fn a_device_with_no_kept_seal_commits_as_the_hub_would_and_the_file_holds() {
+    let (cut, theirs, tip) = whole_history_gone();
+    let (mut u, _) = merged(&cut, &theirs).unwrap();
+    let before = counts(&u);
+    assert!(before.holds(), "the union holds before the commit: {:?}", before.counters);
+    let mut b = as_the_hub(&u, tip);
+    let seq = b.seq + 1;
+    let out = b.commit(&mut u, b"b-3", None);
+    let r = counts(&u);
+    assert!(out.is_ok(), "seq {seq}: {out:?}");
+    assert!(r.holds(), "the union held, the writer took seq {seq}, and now: {:?}", r.counters);
+}

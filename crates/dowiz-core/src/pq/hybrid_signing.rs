@@ -1,16 +1,28 @@
-//! Canonical hybrid signing (Ed25519 ⊕ ML-DSA-65 ⊕ SLH-DSA) — the ONE place
-//! hybrid signatures are created and verified.
+//! A hybrid signature SHAPE (a classical leg, plus ML-DSA-65 or a stub SLH-DSA leg). NOT SAFE TO
+//! SIGN WITH, and nothing may be routed through it to get a hybrid signature.
 //!
-//! Every caller that needs a RequireBoth hybrid signature MUST route through this
-//! module. No other file may independently implement sign/verify hybrid logic.
+//! # One signature leaks the classical secret
+//!
+//! The classical leg is not Ed25519. `classical_sign` writes `sig = secret XOR SHAKE256(domain ||
+//! msg || ctr)`, and `classical_verify` undoes that from public bytes alone: whoever holds one
+//! `(msg, sig)` holds the secret and can sign any message on that leg. The SLH-DSA leg is ML-DSA
+//! under a prefix. So the only real signature here is the ML-DSA-65 leg, and "RequireBoth" adds
+//! nothing to it. The tests below show the shape round-trips, which says nothing about this.
+//!
+//! This module's header once said every caller MUST route through it. Read as of 2026-11-01:
+//! `HybridSigner` is called by this file's tests and `kernel/tests/bebop_session_crypto.rs` only, and
+//! the rest of the tree takes only `HybridPolicy` from here (under `pq`; `ports/agent/cap.rs` has its
+//! own copy without it), a one-variant tag that signs nothing. What is real is `pq::dsa`: dowiz-hub's
+//! seals call ML-DSA-65 alone and never this module (`doc_seal.rs`).
 //!
 //! # Signature legs
 //!
-//! | Leg          | Primitive  | Keygen                    | Sign/Verify             |
-//! |-------------|-----------|---------------------------|-------------------------|
-//! | Classical   | Ed25519   | SHA3-512 domain-sep seed  | deterministic SHA3-512  |
-//! | ML-DSA-65   | FIPS 204  | `dsa::keygen_bytes`       | `dsa::sign_internal`    |
-//! | SLH-DSA     | FIPS 205  | domain-sep ML-DSA (stub)  | domain-sep ML-DSA (stub)|
+//! | Leg         | Primitive         | Keygen                   | Sign/Verify              |
+//! |-------------|-------------------|--------------------------|--------------------------|
+//! | Classical   | none: XOR mask    | SHAKE256 of the secret   | SHAKE256 mask (leaks)    |
+//! | ML-DSA-65   | FIPS 204          | `dsa::keygen_bytes`      | `dsa::sign_internal`     |
+//! | SLH-DSA     | none: FIPS 205 is | domain-sep ML-DSA (stub) | domain-sep ML-DSA (stub) |
+//! |             | not implemented   |                          |                          |
 //!
 //! # SLH-DSA stub (FIPS 205 placeholder)
 //!
@@ -93,11 +105,11 @@ pub struct HybridEnvelope {
     pub sig: HybridSignature,
 }
 
-// ── HybridSigner (the ONE canonical signer) ───────────────────────────────────
+// ── HybridSigner (leaks its classical secret: see the module header) ──────────
 
-/// The ONE canonical hybrid signer. Holds secret material for all signature legs
-/// and provides `sign_mldsa()` / `sign_slhdsa()` / `verify()` / `public_keys()`.
-/// Every other module that needs hybrid signing MUST delegate here.
+/// Holds secret material for all signature legs and provides `sign_mldsa()` /
+/// `sign_slhdsa()` / `verify()` / `public_keys()`. DO NOT DELEGATE HERE: one signature
+/// gives away `classical_secret` (module header).
 pub struct HybridSigner {
     /// Classical (Ed25519) secret seed (32 bytes).
     classical_secret: [u8; ED25519_SK_LEN],
@@ -287,11 +299,10 @@ fn classical_public_from_seed(secret: &[u8; ED25519_SK_LEN]) -> [u8; ED25519_PK_
     pk
 }
 
-/// Deterministic classical signature: `sig = secret XOR H(DOMAIN_SIG || msg)`.
-/// Produces 64 bytes by expanding the hash to fill the signature width.
-/// This is a domain-separated deterministic commitment scheme, modeled after
-/// `RefSigner` — the production classical verifier is the real bebop2 Ed25519;
-/// this is the in-tree reference that CAN be replaced without breaking the interface.
+/// Classical "signature": `sig = secret XOR H(DOMAIN_SIG || msg)`, 64 bytes by expanding
+/// the hash. NOT A SIGNATURE: anyone with `msg` XORs the hash back out and has `secret`
+/// (`classical_verify` does exactly that). Modeled after `RefSigner`, which has the same
+/// property. No Ed25519 sits behind this file.
 fn classical_sign(secret: &[u8; ED25519_SK_LEN], msg: &[u8]) -> Vec<u8> {
     // Produce 64 bytes of deterministic mask: H(DOMAIN || msg) expanded via counter.
     let mut sig = vec![0u8; ED25519_SIG_LEN];

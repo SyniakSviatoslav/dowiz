@@ -9,9 +9,10 @@
 
   WHAT THE MODEL IS: a log of records (id, actor, seq, prev, body), seals (signed tips), frontier
   rows (what a cut left), and `Holds`: id formula, no fork, dense seq per device, every record
-  reachable from a sealed tip, every chain ends at genesis, a frontier tip or a record, every seal ok
-  (names a record, key admitted, valid at its seq, signature verifies), and every record at or below
-  its own device's seals.
+  reachable from a sealed tip, every walk down `prev` ends at genesis or a frontier tip (`Grounded`:
+  the code counts a walk that comes back to itself, W-MG-LEAN), every seal ok (names a record, key
+  admitted, valid at its seq, signature verifies), and every record at or below its own device's
+  seals.
 
   WHAT THE MODEL IS NOT:
     * every actor has a KEY row. A pre-seal actor (no KEY row, any seq) is outside it; so are legacy
@@ -27,8 +28,9 @@
   HYPOTHESES, NEVER AXIOMS. Signature unforgeability is `Unforgeable` and only for a key whose holder
   is `honest`: a STOLEN key signs, and nothing here can tell. Collision resistance is `NoCollision`,
   over the finite list of records at issue, because a global "the hash is injective" is false of
-  SHA-256; a list with no collision is what a real run has. Neither excludes a hash RING
-  (DocLimits.ring_holds), so `chain_ends` takes a writing order as one more hypothesis.
+  SHA-256; a list with no collision is what a real run has. Neither excludes a hash RING, and until
+  `Grounded` this file took a writing order as one more hypothesis; `unsealed` now refuses a ring by
+  itself, so `Holds` does too (DocLimits.ring_refused).
 
   PROVED:
     signed_for          Holds: every record has an ok seal of ITS OWN device at or above it, whose tip
@@ -41,7 +43,10 @@
     admission_signed    with Unforgeable: an admitted key is a trusted root, or an admitted holder
                         signed over its ADMIT. A root is what `trusted` says; under Trust::Genesis
                         that is the unsigned table: this theorem then says nothing about a forger.
-    chain_ends          with a writing order: every walk ends at genesis or at a frontier tip.
+    chain_ends          every walk ends at genesis or at a frontier tip.
+    no_row_starts_at_one  a device with no row of its own starts at 1, on whatever tip (count.rs FROM
+                        WHERE, W-MG-LEAN D-B): another device's frontier tip starts nothing.
+    past_own_row        every record of a device sits above its own newest row.
 -/
 
 set_option linter.unusedSectionVars false
@@ -140,6 +145,22 @@ inductive Admitted (W : World A I P G) (F : File A I P G) : A → Prop
 def EndsOk (W : World A I P G) (F : File A I P G) (p : I) : Prop :=
   p = W.zero ∨ (∃ f ∈ F.rows, f.tip = p) ∨ ∃ r ∈ F.recs, r.id = p
 
+/-- The walk down `prev` from this record ends: at genesis, at a frontier tip, or at a record whose
+  own walk ends (`count.rs` `unsealed`: a walk that returns to a record of its own counts one).
+  A list of records has a ring exactly when this fails. -/
+inductive Grounded (W : World A I P G) (F : File A I P G) : Rec A I P → Prop
+  | zero {r} : r ∈ F.recs → r.prev = W.zero → Grounded W F r
+  | tip {r} {f : Row A I} : r ∈ F.recs → f ∈ F.rows → f.tip = r.prev → Grounded W F r
+  | step {r q} : r ∈ F.recs → q ∈ F.recs → q.id = r.prev → Grounded W F q → Grounded W F r
+
+theorem Grounded.mono {W : World A I P G} {F Q : File A I P G} {r : Rec A I P}
+    (hr : ∀ x ∈ F.recs, x ∈ Q.recs) (hf : ∀ f ∈ F.rows, f ∈ Q.rows) (h : Grounded W F r) :
+    Grounded W Q r := by
+  induction h with
+  | zero hm h0 => exact .zero (hr _ hm) h0
+  | tip hm hff he => exact .tip (hr _ hm) (hf _ hff) he
+  | step hm hq hi _ ih => exact .step (hr _ hm) (hr _ hq) hi ih
+
 /-- THE PREDICATE. Each field names the counter it stands for. -/
 structure Holds (W : World A I P G) (F : File A I P G) : Prop where
   /-- chained: every id is the formula's. -/
@@ -161,6 +182,8 @@ structure Holds (W : World A I P G) (F : File A I P G) : Prop where
   ends : ∀ r ∈ F.recs, EndsOk W F r.prev
   /-- `unsealed`'s third term, `unowned`. -/
   owned : ∀ r ∈ F.recs, ∃ s ∈ F.seals, s.actor = r.actor ∧ r.seq ≤ s.seq
+  /-- `unsealed`: no walk comes back to a record of its own (W-MG-LEAN). -/
+  grounded : ∀ r ∈ F.recs, Grounded W F r
 
 /-! ### The own chain -/
 
@@ -318,24 +341,41 @@ theorem admission_signed {Signed : A → (A × Nat × I × I) → Prop} {honest 
   | byAdmit r s hr hs hb ha hle hf had =>
     exact .inr ⟨r, hr, s, hs, hb, ha, hle, hU _ _ _ (hall _ had) hf.2.2, had⟩
 
-/-- Every walk ends at genesis or at a frontier tip, GIVEN a writing order: `rank` drops along `prev`.
-  `Holds` alone does not give this: DocLimits.ring_holds is a ring that passes every field. -/
-theorem chain_ends (H : Holds W F) (rank : I → Nat)
-    (hrank : ∀ x ∈ F.recs, ∀ q ∈ F.recs, q.id = x.prev → rank q.id < rank x.id) :
+/-- Every walk ends at genesis or at a frontier tip. Part of `Holds`: DocLimits.ring_refused is a ring
+  that `Grounded` alone turns away. -/
+theorem chain_ends (H : Holds W F) :
     ∀ r ∈ F.recs, ∃ e, Reach F.recs r.id e ∧ (e.prev = W.zero ∨ ∃ f ∈ F.rows, f.tip = e.prev) := by
-  have key : ∀ n, ∀ r ∈ F.recs, rank r.id = n →
-      ∃ e, Reach F.recs r.id e ∧ (e.prev = W.zero ∨ ∃ f ∈ F.rows, f.tip = e.prev) := by
-    intro n
-    induction n using Nat.strongRecOn with
-    | ind n ih =>
-      intro r hr hn
-      rcases H.ends r hr with h0 | hf | ⟨q, hq, hqi⟩
-      · exact ⟨r, .tip hr rfl, .inl h0⟩
-      · exact ⟨r, .tip hr rfl, .inr hf⟩
-      · have hlt := hrank r hr q hq hqi
-        obtain ⟨e, hre, he⟩ := ih (rank q.id) (hn ▸ hlt) q hq rfl
-        exact ⟨e, Reach.trans (.step (.tip hr rfl) hq hqi) hre, he⟩
-  exact fun r hr => key _ r hr rfl
+  intro r hr
+  induction H.grounded r hr with
+  | zero hm h0 => exact ⟨_, .tip hm rfl, .inl h0⟩
+  | tip hm hf he => exact ⟨_, .tip hm rfl, .inr ⟨_, hf, he⟩⟩
+  | step hm hq hi _ ih =>
+    obtain ⟨e, hre, he⟩ := ih hq
+    exact ⟨e, Reach.trans (.step (.tip hm rfl) hq hi) hre, he⟩
+
+/-- A device with no row starts at 1, whatever its first `prev` names: on another device's frontier
+  tip it opens at seq 1 and at no other (`lean_tests.rs` `db_`). -/
+theorem no_row_starts_at_one (H : Holds W F) {a : A} {x : Rec A I P} (hn : rowOf F.rows a = none)
+    (hx : (chainOf F a).head? = some x) : x.seq = 1 := by
+  have := (H.device a).2 x hx
+  unfold Starts at this
+  rwa [hn] at this
+
+/-- Every record of a device sits above its newest row: one past it first, dense after. -/
+theorem past_own_row (H : Holds W F) {a : A} {f : Row A I} (hf : rowOf F.rows a = some f)
+    {r : Rec A I P} (hr : r ∈ F.recs) (ha : r.actor = a) : f.seq < r.seq := by
+  have hd := H.device a
+  have hm : r ∈ chainOf F a := mem_chainOf.mpr ⟨hr, ha⟩
+  cases hc : chainOf F a with
+  | nil => rw [hc] at hm; cases hm
+  | cons x l =>
+    rw [hc] at hd hm
+    have hs := hd.2 x rfl
+    unfold Starts at hs
+    rw [hf] at hs
+    cases hm with
+    | head => omega
+    | tail _ ht => have := hd.1.seq_lt r ht; omega
 
 end Bebop.DocLog
 
@@ -343,3 +383,5 @@ end Bebop.DocLog
 #print axioms Bebop.DocLog.holds_gives
 #print axioms Bebop.DocLog.admission_signed
 #print axioms Bebop.DocLog.chain_ends
+#print axioms Bebop.DocLog.no_row_starts_at_one
+#print axioms Bebop.DocLog.past_own_row

@@ -7,13 +7,17 @@ use super::cut::{read_old, seals_of};
 use super::keys::{key_rows, stage_key, stage_keys, Key, KeyOp};
 use super::merge_body::{merge_body, MergeView, Row, STATE_COMMUTES};
 use super::seal::{read_heads, stage_heads, stage_seal, Head};
+use super::seg::{stage_seg, Segment};
 use super::budget::Budget;
 use super::tests::{key_of, Dev, ToyIds, ToySigner, ToyVerifier};
 use super::verify::{verify, Report, Trust};
 use super::write::{stage_doc, Refs};
-use super::{Doc, DocError, Ids};
-use crate::{EvLog, Record, Store};
+use super::{forgotten_body, Doc, DocError, Erased, Ids};
+use crate::{EvLog, Record, Store, Tx};
 use std::collections::BTreeMap;
+
+#[path = "tam_l3t_tests.rs"]
+mod l3t;
 
 type D = Dev<ToySigner>;
 
@@ -77,19 +81,46 @@ fn reordered(st: &Store, order: &[usize]) -> Store {
         rows.push((k.actor_id, stage_key(&mut out, &mut tx, &Key { admit_rec, ..k.clone() }).unwrap()));
     }
     let keys = stage_keys(&mut out, &mut tx, &mut rows).unwrap();
+    let heads = carried_heads(st, &mut out, &mut tx, &o.heads);
+    let doc = stage_doc(&mut out, &mut tx, o.flags, Refs { log: Some(log), heads: Some(heads), keys: Some(keys), ..Refs::default() }).unwrap();
+    out.commit_bytes(&tx, doc);
+    out
+}
+
+/// HEADS and every seal of `st`, verbatim, in `out`: a seal is copied with no key.
+fn carried_heads(st: &Store, out: &mut Store, tx: &mut Tx, rows: &[Head]) -> usize {
     let mut budget = Budget::of(st);
     let mut heads = Vec::new();
-    for h in &o.heads {
+    for h in rows {
         let mut chain = seals_of(st, h, 64, &mut budget).unwrap();
         chain.reverse();
         let mut prev = None;
         for s in &chain {
-            prev = Some(stage_seal(&mut out, &mut tx, &s.actor_id, s.seq, &s.tip, s.claimed_ms, prev, s.alg, &s.sig).unwrap());
+            prev = Some(stage_seal(out, tx, &s.actor_id, s.seq, &s.tip, s.claimed_ms, prev, s.alg, &s.sig).unwrap());
         }
         heads.push(Head { seal: prev, ..*h });
     }
-    let heads = stage_heads(&mut out, &mut tx, &mut heads).unwrap();
-    let doc = stage_doc(&mut out, &mut tx, o.flags, Refs { log: Some(log), heads: Some(heads), keys: Some(keys), ..Refs::default() }).unwrap();
+    stage_heads(out, tx, &mut heads).unwrap()
+}
+
+/// The cut file `st` with `recs` as its log and everything else verbatim: what a forger with the
+/// file and no key writes. No seal, KEY or SEG row moves. Its keys are genesis keys: no ADMIT to remap.
+fn relaid(st: &Store, recs: &[Record]) -> Store {
+    let o = read_old(st).unwrap();
+    let mut out = Store::create_bytes(1 << 20).unwrap();
+    let mut tx = out.begin().unwrap();
+    let mut log = EvLog::stage_init_in(&mut out, &mut tx).unwrap();
+    for r in recs {
+        log = EvLog::stage_append_in(&mut out, &mut tx, log, r, Some(&r.id)).unwrap();
+    }
+    let mut rows = Vec::new();
+    for k in &o.keys {
+        rows.push((k.actor_id, stage_key(&mut out, &mut tx, k).unwrap()));
+    }
+    let keys = stage_keys(&mut out, &mut tx, &mut rows).unwrap();
+    let heads = carried_heads(st, &mut out, &mut tx, &o.heads);
+    let seg = stage_seg(&mut out, &mut tx, &Segment { prev: None, ..o.segs[0].clone() }).unwrap();
+    let doc = stage_doc(&mut out, &mut tx, o.flags, Refs { log: Some(log), heads: Some(heads), keys: Some(keys), seg: Some(seg), ..Refs::default() }).unwrap();
     out.commit_bytes(&tx, doc);
     out
 }

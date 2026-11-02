@@ -10,7 +10,7 @@ use super::tests::{key_of, Dev};
 use super::verify::{verify, Trust};
 use super::{Doc, DocError, Signer, Verifier};
 use crate::Store;
-use dowiz_core::pq::dsa::{keygen, sign, verify_internal_bytes, MlDsa65Pk, MlDsa65Sk, PUBLICKEYBYTES, SIGNATUREBYTES};
+use dowiz_core::pq::dsa::{keygen, sign_pure_bytes, verify_pure_bytes, MlDsa65Pk, MlDsa65Sk, PUBLICKEYBYTES, SIGNATUREBYTES};
 use dowiz_core::sha256_hw::sha256_hw as sha256;
 
 struct MlDsa {
@@ -35,15 +35,15 @@ impl Signer for MlDsa {
     fn public_key(&self) -> Vec<u8> {
         self.pk.bytes.clone()
     }
-    /// Deterministic (FIPS 204 `rnd` = 0^32), as the published price root is signed.
+    /// External pure ML-DSA, empty context (FORMAT §9.4), deterministic (`rnd` = 0^32).
     fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        sign(&self.sk, msg, &[0u8; 32]).bytes
+        sign_pure_bytes(&self.sk.bytes, msg, &[0u8; 32])
     }
 }
 struct MlDsaVerifier;
 impl Verifier for MlDsaVerifier {
     fn verify(&self, alg: i64, pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
-        alg == ALG_ML_DSA_65 && pk.len() == PUBLICKEYBYTES && sig.len() == SIGNATUREBYTES && verify_internal_bytes(pk, msg, sig)
+        alg == ALG_ML_DSA_65 && pk.len() == PUBLICKEYBYTES && sig.len() == SIGNATUREBYTES && verify_pure_bytes(pk, msg, sig)
     }
 }
 

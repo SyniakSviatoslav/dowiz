@@ -5,7 +5,7 @@ use bebop_store::evlog::doc::{id_message, Ids, Signer, Verifier, ALG_ML_DSA_65};
 use bebop_store::evlog::{Record, FLAG_SHA256};
 use bebop_store::merkle;
 use bebop_store::nodekey::sha256;
-use dowiz_core::pq::dsa::{keygen, sign, verify_internal_bytes, MlDsa65Pk, MlDsa65Sk, PUBLICKEYBYTES, SIGNATUREBYTES};
+use dowiz_core::pq::dsa::{keygen, sign_pure_bytes, verify_pure_bytes, MlDsa65Pk, MlDsa65Sk, PUBLICKEYBYTES, SIGNATUREBYTES};
 
 pub const NONCE_LEN: usize = 16;
 /// FORMAT §9.4: the mark, the high bit of the byte behind the nonce.
@@ -62,7 +62,7 @@ impl Signer for MlDsa {
         self.pk.bytes.clone()
     }
     fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        sign(&self.sk, msg, &[0u8; 32]).bytes
+        sign_pure_bytes(&self.sk.bytes, msg, &[0u8; 32])
     }
 }
 
@@ -71,7 +71,7 @@ pub struct MlDsaVerifier;
 
 impl Verifier for MlDsaVerifier {
     fn verify(&self, alg: i64, pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
-        alg == ALG_ML_DSA_65 && pk.len() == PUBLICKEYBYTES && sig.len() == SIGNATUREBYTES && verify_internal_bytes(pk, msg, sig)
+        alg == ALG_ML_DSA_65 && pk.len() == PUBLICKEYBYTES && sig.len() == SIGNATUREBYTES && verify_pure_bytes(pk, msg, sig)
     }
     fn actor_of(&self, pk: &[u8]) -> Option<[u8; 32]> {
         Some(sha256(pk))

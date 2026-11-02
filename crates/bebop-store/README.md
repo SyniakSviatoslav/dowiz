@@ -10,10 +10,12 @@ instead of reading it as data. A commit either finished or is not there, and a l
 a signature (a *seal*) that makes a later edit visible. A file can also carry evidence from outside
 itself of when a record existed, and an archive file can carry its own reader.
 
-**This is pre-1.0 and not published to any registry.** The container format is frozen at version 2.
-The signed layouts above it changed as recently as 2026-10-31, and the Rust API can still change.
-Everything below describes what the code in this repository does today, and each promise has an
-example that runs it.
+**This is pre-1.0 and not published to any registry.** The format is not frozen: the container is
+version 2, the first release fixes the text, and until then a layout no production image holds may
+change. The signed layouts did in October 2026, and the Rust API can still change. Everything below
+describes what the code in this repository does today. The table under
+[Guarantee levels](#guarantee-levels) names the example that runs each promise; merging has none
+here, and `crates/dowiz-hub/tests/m2_merge.rs` and `tools/gates/maingoal.sh` run it.
 
 ## What it does not promise
 
@@ -22,6 +24,10 @@ These limits are part of the contract.
 - **A proof is not truth.** From `bebop-log/src/doc/verify.rs`: a seal counted `ok` "means the holder
   of key K signed this tip at seq s of its chain and nothing under the tip has changed since. It
   does NOT say the event happened, that a quantity is true, or that `claimed_ms` is right."
+- **Status 0 is not a verdict on a signed file.** A forged declaration can sit at status 0 with
+  `holds` false (format §14), so a caller reads `holds`, never the status alone.
+- **A rollback shows only with an anchor or a second file.** A file as it stood before a REVOKE is a
+  shorter true file, and one file cannot know a newer one exists (format §14).
 - **Seals are not checked by the MIT reader.** It carries no signature algorithm, and it says so:
   "seals COUNTED, not CHECKED: this reader carries no signature algorithm (MIT, no ML-DSA); a count
   is not a proof -- bring a verifier to the same seam, or the format text's independent readers".
@@ -37,7 +43,7 @@ These limits are part of the contract.
   across the copies and two seal chains of one key. Under a cut a conflict list cannot be re-derived:
   the answer is `NOT CHECKED`, never clean. See format §14.
 - **Opening a file checks only what you ask for.** `Options::default()` opens at `Verify::Anchor`,
-  which proves the last commit. Older commits are trusted, and a damaged old object can read as a
+  which checks the last commit. Older commits are trusted, and a damaged old object can read as a
   refusal or as a wrong answer, until you open at `Verify::Reachable` or call `Db::verify`.
 - **Nothing is encrypted.** The file holds your data as plain bytes.
 
@@ -88,7 +94,7 @@ token, and the core holds one event, "this root was recorded here", with adapter
 
 | Level | What it adds | Status today |
 |---|---|---|
-| **0, the file** | Signed per-device chains, verified from the file and public keys alone. A file that reads with no install. | Built. Merging two copies is planned for this level and **not built**. |
+| **0, the file** | Signed per-device chains, verified from the file and public keys alone. A file that reads with no install. | Built, and two copies of one file merge with no server (M2-min, above). The full merge is **not built**. |
 | **1, the anchor** | Evidence from outside the file that a record existed by a moment, kept in the file: OpenTimestamps (Bitcoin), a time-stamp authority's signature, or Roughtime as a lower bound. | The format and the checking seam are built here. The adapters are in `dowiz-hub`, which is AGPL (see below). |
 | **2, the settlement** | A chain or witnesses fixing the order between organisations that do not trust each other, at the moments they connect. | Not built. |
 
@@ -108,7 +114,7 @@ does not hold.
 | An archive carries its own reader | [`archive`](examples/archive.rs) |
 
 Run one with `cargo run --example refuse_damage`. The sealed examples use a stand-in named
-`AnyoneCanForge`, which is **not a signature**: anyone can make one. They prove the layout and the
+`AnyoneCanForge`, which is **not a signature**: anyone can make one. They show the layout and the
 counters, and say so.
 
 ## Verify a file with no install
@@ -122,8 +128,10 @@ python3 tools/verify/bebop-verify.py your.bebop --dump --verify
 
 Both print one status line, and with `--verify` the counters of a signed file. `status=0` means
 every object the root reaches matches its checksum, the last commit matches its anchor, and the
-layout rules hold. It does not mean the content is true. In the counters, `checked=0` means the
-seals were counted and not checked.
+layout rules hold. It does not mean the content is true, and it is no verdict on the seals. In the
+counters, `checked=0` means the seals were counted and not checked. These readers cannot give `holds`.
+That takes a verifier that judges signatures: `Report::holds()` under your `Verifier`, or `doc_verify`,
+which exits 0 only when it holds.
 
 An archive file also carries its own reader: `node examples/read.mjs archive.bebop`. That reader is
 testimony, not authority, because a file cannot vouch for itself. Compare its sha256 with a
@@ -131,11 +139,11 @@ published one, or read the file with one of the verifiers above.
 
 ## Signing a file
 
-**To sign, you bring ML-DSA-65.** There is no signature code in the MIT crates. `bebop_store::evlog::doc`
-defines the traits `Signer`, `Verifier` and `Ids`, and you implement them. `dowiz-core` has an
-ML-DSA-65 implementation, and `dowiz-hub` has the implementations of those traits and the anchor
-adapters, but both are **AGPL-3.0-or-later**, and linking them brings the AGPL's terms to your
-program. `dowiz-hub` also has `doc_verify`, an AGPL program you can run beside your own code. It
+**To sign, you bring ML-DSA-65.** The store crates hold no signature code. `bebop_store::evlog::doc`
+defines the traits `Signer`, `Verifier` and `Ids`, and you implement them or take `bebop-sig-mldsa`,
+a separate MIT OR Apache-2.0 crate. `dowiz-hub` has the `Ids` implementation and the anchor adapters,
+and `dowiz-core` has its own ML-DSA-65, but both are **AGPL-3.0-or-later**, and linking them brings the
+AGPL's terms to your program. `dowiz-hub` also has `doc_verify`, an AGPL program you can run beside your own code. It
 checks ML-DSA-65 seals and its three anchor kinds, and it reads key operations and declarations in
 the record framing `dowiz-hub` writes.
 
@@ -143,15 +151,14 @@ the record framing `dowiz-hub` writes.
 |---|---|---|
 | Read and write KV files | this crate | MIT OR Apache-2.0 |
 | Read a signed file, count its seals | `bebop-wasm-reader`, or `tools/verify` | MIT OR Apache-2.0 |
-| Write a signed file | this crate, plus your own ML-DSA-65 behind `Signer` | MIT OR Apache-2.0, plus yours |
-| Check seals | your own ML-DSA-65 behind `Verifier` | MIT OR Apache-2.0, plus yours |
+| Write a signed file | this crate, plus `bebop-sig-mldsa` or your own ML-DSA-65 behind `Signer` | MIT OR Apache-2.0 |
+| Check seals | `bebop-sig-mldsa`, or your own ML-DSA-65 behind `Verifier` | MIT OR Apache-2.0 |
 | Check anchors | your own adapter behind `AnchorCheck`, or `dowiz-hub`'s | yours, or AGPL |
 
-**Interoperability warning.** Seals are made with ML-DSA `Sign_internal` and checked with
-`Verify_internal` (FIPS 204 algorithms 7 and 8) directly over the seal message, with no context
-string or domain prefix. A library that exposes only the external `ML-DSA.Sign` signs a different
-message, and its signatures will not verify against these seals. The message and the actor id are
-in [FORMAT §9.4](../../docs/FORMAT-BEBOP-IMAGE-v2.md).
+**Interoperability.** A seal is external pure ML-DSA-65 (FIPS 204 `ML-DSA.Sign`) over the seal
+message with the empty context, which is plain signing in a stock library. `bebop-sig-mldsa`
+implements both seams over the `fips204` crate; no independent audit of that crate is known. The
+message and the actor id are in [FORMAT §9.4](../../docs/FORMAT-BEBOP-IMAGE-v2.md).
 
 ## The crates
 
@@ -165,6 +172,8 @@ in [FORMAT §9.4](../../docs/FORMAT-BEBOP-IMAGE-v2.md).
 | `bebop-store` | this facade, plus `merkle`, `nodekey` (SHA-256), `proj`, `zset` | no |
 | `bebop-ffi` | the C ABI (cdylib) and, through it, Python | no |
 | `bebop-wasm-reader` | the reader compiled to wasm32, no imports | no |
+| `bebop-sig-mldsa` | ML-DSA-65 behind `Signer` and `Verifier`, over the `fips204` crate | yes |
+| `einfile-sync` | one sync session between two copies of a signed file, bytes in and out | yes |
 
 `bebop-store` re-exports `bebop-image`, `bebop-kv` (as `kv`), `bebop-log` (as `evlog`) and `bebop-io`
 (as `iodev`, plus `Db`, `ReadTxn`, `WriteTxn`, `Scan`, `Refusal`, `Options`, `Verify`, `Durability`,
@@ -176,16 +185,17 @@ format. It is not part of the public library.
 
 ## Five readers, one answer
 
-The same image is read by five independent readers: `bebop.bin`
+Every KV fixture is read by five independent readers: `bebop.bin`
 (`bebop-lang/selfhost/std/kv.bp`), this crate natively, this crate as wasm32,
 `crates/bebop-wasm/oracle.py`, and the C ABI through Python. Each must give the same `(n, root)` or
-the same refusal, and `tools/gates/conformance.sh` holds them to it.
+the same refusal, and `tools/gates/conformance.sh` holds them to it. `bebop.bin` runs on AArch64 only;
+elsewhere it is named as not measured. A signed file has its own check, `tools/verify/gate.sh`.
 
 ## The format
 
-[`docs/FORMAT-BEBOP-IMAGE-v2.md`](../../docs/FORMAT-BEBOP-IMAGE-v2.md) is normative. **It is written
-in Ukrainian**, and no English text of it exists yet. §12 of that document lists what a third-party
-implementer would still have to take from the code.
+[`docs/FORMAT-BEBOP-IMAGE-v2.en.md`](../../docs/FORMAT-BEBOP-IMAGE-v2.en.md) is normative, and
+[`docs/FORMAT-BEBOP-IMAGE-v2.md`](../../docs/FORMAT-BEBOP-IMAGE-v2.md) is its Ukrainian twin. §12 lists
+what is still open for a third-party implementer, and §14 what one file cannot decide.
 
 Changes are in [`CHANGELOG-store.md`](../../CHANGELOG-store.md), which also states the versioning
 rule.

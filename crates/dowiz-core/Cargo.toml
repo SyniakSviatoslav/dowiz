@@ -40,7 +40,7 @@ debug = false
 # IndexSum-emitted Laplacian against dense laplacian()). Dev-only, outside the
 # zero-dep proof surface (eqc-rs is itself a zero-dep crate).
 eqc-rs = { path = "../../tools/eqc-rs" }
-# NIST ACVP ML-DSA-65 KAT gate (pq::dsa::dsa_acvp_tests) — test-only (de)serialization
+# NIST ACVP ML-DSA-65 KAT gate (pq::dsa::dsa_acvp_tests, dsa_acvp_external_tests) — test-only (de)serialization
 # of the vendored KAT vectors. Never in the shipping build (`cargo tree -e no-dev` stays empty).
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -77,7 +77,7 @@ impl SealedHub {
     /// until a verifier brings that key as a root (`Trust::Only`).
     pub fn cut(&mut self, keep: usize, key: &DeviceKey, claimed_ms: i64) -> Result<Vec<u8>, HubError> {
         let view = Doc::open(&self.store).map_err(doc_err)?;
-        if !read_keys(&self.store, view.keys).iter().any(|k| k.actor_id == key.id && k.admit_rec.is_none()) {
+        if !read_keys(&self.store, view.keys).iter().any(|k| k.actor_id == key.id() && k.admit_rec.is_none()) {
             return Err(HubError::Store(StoreError::Corrupt("only a root may cut: this key was admitted")));
         }
         let archive = self.store.to_bytes_trimmed();

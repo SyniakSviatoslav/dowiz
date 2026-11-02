@@ -5,6 +5,8 @@
   THE CODE IT MODELS, BY READING: crates/bebop-log/src/doc/merge.rs `Doc::merge_into`. NOTHING HERE
   SAYS THE RUST IS PROVED. `union` is records ours-then-their-tail and seals likewise; the frontier
   rows must be equal (`CutOneSide`). The model does not write a MERGE: nor does `merge_into`.
+  `Merges` is every refusal of `merge_into` the model can state, in the code's order; WHAT IT CANNOT
+  STATE is in the section "Where this model and merge.rs differ" at the end of this file.
 
   WHAT THE CARD ASKED, AND WHAT IS TRUE. "The merged file holds iff both sides hold and neither
   forked" is FALSE as a sentence about the union, in both directions, and each failure is a theorem:
@@ -21,6 +23,12 @@
     fork_breaks_union   the converse for forks: a union that holds was no fork
     merged_holds_iff    the iff, for sides that hold
     merges_iff          `Merges` (what `merge_into` checks) with a union that holds
+    last_verify_is_collision   past every other check, the union's last verify can fail on a collision
+                        and on nothing else IN THE MODEL. In the code it fails on more: see the end.
+    union_chain_seals, union_chain_seals'   per device the union keeps the longer seal chain
+    union_nothing_new   nothing new on their side: the union IS ours (`wrote` false)
+    frontOf_kept        a device with records stands at them, above its row
+    union_front_max     the frontier of the union is the pointwise maximum, rows included
     union_comm_front / union_assoc_front / union_idem_front   the frontier of the file is a semilattice
     union_keeps         no record lost, in either direction
 -/
@@ -42,6 +50,12 @@ def union (F₁ F₂ : File A I P G) : File A I P G :=
 
 /-- Neither forked: per device, one side's chain is a prefix of the other's (`missing`). -/
 def NoFork (F₁ F₂ : File A I P G) : Prop := ∀ a, Compat (chainOf F₁ a) (chainOf F₂ a)
+
+/-- A device's seals in file order: its chain, the model having no HEADS row. -/
+def sealsOf (F : File A I P G) (a : A) : List (Seal A I G) := F.seals.filter (fun s => decide (s.actor = a))
+
+/-- `SealFork`'s negation: per device, one side's seals are a prefix of the other's. -/
+def NoSealFork (F₁ F₂ : File A I P G) : Prop := ∀ a, Compat (sealsOf F₁ a) (sealsOf F₂ a)
 
 /-- `RevokedTail`'s negation: every record of the union is valid under every REVOKE of the union. -/
 def NoPastRevoke (W : World A I P G) (F₁ F₂ : File A I P G) : Prop :=
@@ -94,6 +108,63 @@ theorem union_chain' {a : A} (h : chainOf F₂ a <+: chainOf F₁ a) :
     simpa using (mem_chainOf.mp this).1
   rw [this, List.append_nil]
 
+theorem mem_sealsOf {F : File A I P G} {a : A} {s : Seal A I G} :
+    s ∈ sealsOf F a ↔ s ∈ F.seals ∧ s.actor = a := by
+  simp [sealsOf, List.mem_filter]
+
+/-- The device's seals in the union: ours, then what of theirs we lack. -/
+theorem sealsOf_union (a : A) : sealsOf (union F₁ F₂) a =
+    sealsOf F₁ a ++ (sealsOf F₂ a).filter (fun s => decide (s ∉ F₁.seals)) := by
+  simp only [sealsOf, union, unionL, List.filter_append, List.filter_filter]
+  congr 2
+  funext s
+  exact Bool.and_comm ..
+
+/-- Their seal chain is the longer: the union's is theirs (`seal_chains`, a seal carried with no new
+  record). -/
+theorem union_chain_seals {a : A} (hn : (sealsOf F₂ a).Nodup) (h : sealsOf F₁ a <+: sealsOf F₂ a) :
+    sealsOf (union F₁ F₂) a = sealsOf F₂ a := by
+  obtain ⟨t, ht⟩ := h
+  rw [sealsOf_union, ← ht, List.filter_append]
+  have h1 : (sealsOf F₁ a).filter (fun s => decide (s ∉ F₁.seals)) = [] := by
+    apply List.filter_eq_nil_iff.mpr
+    intro s hs
+    simpa using (mem_sealsOf.mp hs).1
+  have h2 : t.filter (fun s => decide (s ∉ F₁.seals)) = t := by
+    apply List.filter_eq_self.mpr
+    intro s hs
+    have hb : s ∈ sealsOf F₂ a := ht ▸ List.mem_append_right _ hs
+    have hact := (mem_sealsOf.mp hb).2
+    simp only [decide_eq_true_eq]
+    intro hin
+    rw [← ht] at hn
+    exact (List.nodup_append.mp hn).2.2 s (mem_sealsOf.mpr ⟨hin, hact⟩) s hs rfl
+  rw [h1, h2, List.nil_append]
+
+/-- Our seal chain is the longer: the union's is ours. -/
+theorem union_chain_seals' {a : A} (h : sealsOf F₂ a <+: sealsOf F₁ a) :
+    sealsOf (union F₁ F₂) a = sealsOf F₁ a := by
+  rw [sealsOf_union]
+  have : (sealsOf F₂ a).filter (fun s => decide (s ∉ F₁.seals)) = [] := by
+    apply List.filter_eq_nil_iff.mpr
+    intro s hs
+    have := h.subset hs
+    simpa using (mem_sealsOf.mp this).1
+  rw [this, List.append_nil]
+
+theorem unionL_sub {R : Type} [DecidableEq R] {a b : List R} (h : ∀ r ∈ b, r ∈ a) : unionL a b = a := by
+  have : b.filter (fun r => decide (r ∉ a)) = [] := by
+    apply List.filter_eq_nil_iff.mpr
+    intro r hr
+    simpa using h r hr
+  simp only [unionL, this, List.append_nil]
+
+/-- NOTHING NEW ON THEIR SIDE: the union IS ours, which is `wrote` false and no verify. -/
+theorem union_nothing_new (hr : ∀ r ∈ F₂.recs, r ∈ F₁.recs) (hs : ∀ s ∈ F₂.seals, s ∈ F₁.seals) :
+    union F₁ F₂ = F₁ := by
+  show (⟨unionL F₁.recs F₂.recs, unionL F₁.seals F₂.seals, F₁.rows⟩ : File A I P G) = F₁
+  rw [unionL_sub hr, unionL_sub hs]
+
 /-- A seal's facts stand in the union, given validity there. -/
 theorem facts_lift {F : File A I P G} {s : Seal A I G} (hsub : ∀ r ∈ F.recs, r ∈ (union F₁ F₂).recs)
     (h : SealFacts W F s) (hv : Valid W (union F₁ F₂) s.actor s.seq) :
@@ -140,7 +211,7 @@ theorem union_holds (hA : Holds W F₁) (hB : Holds W F₂) (hrows : F₁.rows =
   have nodupB : ∀ a, (chainOf F₂ a).Nodup := fun a => hB.nodup.filter _
   refine
     { ids := ?_, nodup := ?_, idsOnce := ?_, noFork := ?_, device := ?_, sealsOk := hub,
-      sealed := ?_, vouched := ?_, ends := ?_, owned := ?_ }
+      sealed := ?_, vouched := ?_, ends := ?_, owned := ?_, grounded := ?_ }
   · intro r h
     rcases union_keeps.mp h with h | h
     · exact hA.ids r h
@@ -200,6 +271,13 @@ theorem union_holds (hA : Holds W F₁) (hB : Holds W F₂) (hrows : F₁.rows =
       exact ⟨s, sub₁s s hs, ha, hle⟩
     · obtain ⟨s, hs, ha, hle⟩ := hB.owned r h
       exact ⟨s, sub₂s s hs, ha, hle⟩
+  · intro r h
+    rcases union_keeps.mp h with h | h
+    · exact (hA.grounded r h).mono sub₁ (fun _ hf => hf)
+    · exact (hB.grounded r h).mono sub₂ (fun _ hf => by
+        show _ ∈ F₁.rows
+        rw [hrows]
+        exact hf)
 
 /-- Two dense chains from one start, with no pair at one seq but equals, are comparable. -/
 theorem dense_compat {a b : List (Rec A I P)} (la : Linked a) (lb : Linked b)
@@ -274,41 +352,115 @@ theorem merged_holds_iff (hA : Holds W F₁) (hB : Holds W F₂) (hrows : F₁.r
   · rintro ⟨hf, hp, hc⟩
     exact union_holds hA hB hrows hf hp hc
 
-/-- What `merge_into` checks before it writes: WHOLE on each side, one frontier, ONE HISTORY. -/
+/-- What `merge_into` checks before it writes, in its order and as far as the model has the words:
+  WHOLE on each side (`NotWhole`), one frontier (`CutOneSide`), ONE HISTORY (`Fork`), no record past a
+  REVOKE (`RevokedTail`), one seal chain per device (`SealFork`). -/
 structure Merges (F₁ F₂ : File A I P G) (W : World A I P G) : Prop where
   left : Holds W F₁
   right : Holds W F₂
   rows : F₁.rows = F₂.rows
   noFork : NoFork F₁ F₂
+  noPast : NoPastRevoke W F₁ F₂
+  noSealFork : NoSealFork F₁ F₂
 
-/-- The sentence the card asked for, with its one missing clause in the open: what `merge_into`
-  accepts and ends on a file that holds is exactly: both sides hold, on one frontier, neither forked,
-  no record past a REVOKE, no id collision. -/
+/-- THE LAST VERIFY, IN THE MODEL. Past every check above, the union holds exactly when no id
+  collides: `UnionNotWhole` is a collision and nothing else HERE. In the code it is more, because the
+  model has no actor without a KEY row: see the end of this file. -/
+theorem last_verify_is_collision (h : Merges F₁ F₂ W) :
+    Holds W (union F₁ F₂) ↔ NoCollision (F₁.recs ++ F₂.recs) :=
+  ⟨fun hU => ((merged_holds_iff h.left h.right h.rows).mp hU).2.2,
+    fun hc => union_holds h.left h.right h.rows h.noFork h.noPast hc⟩
+
+/-- The sentence the card asked for, every clause in the open: what `merge_into` accepts and ends on
+  a file that holds is exactly: both sides hold, on one frontier, neither forked, no record past a
+  REVOKE, one seal chain per device, no id collision. -/
 theorem merges_iff : (Merges F₁ F₂ W ∧ Holds W (union F₁ F₂)) ↔
     (Holds W F₁ ∧ Holds W F₂ ∧ F₁.rows = F₂.rows ∧ NoFork F₁ F₂ ∧ NoPastRevoke W F₁ F₂ ∧
-      NoCollision (F₁.recs ++ F₂.recs)) := by
+      NoSealFork F₁ F₂ ∧ NoCollision (F₁.recs ++ F₂.recs)) := by
   constructor
-  · rintro ⟨⟨hA, hB, hr, hf⟩, hU⟩
-    obtain ⟨_, hp, hc⟩ := (merged_holds_iff hA hB hr).mp hU
-    exact ⟨hA, hB, hr, hf, hp, hc⟩
-  · rintro ⟨hA, hB, hr, hf, hp, hc⟩
-    exact ⟨⟨hA, hB, hr, hf⟩, union_holds hA hB hr hf hp hc⟩
+  · rintro ⟨h, hU⟩
+    exact ⟨h.left, h.right, h.rows, h.noFork, h.noPast, h.noSealFork, (last_verify_is_collision h).mp hU⟩
+  · rintro ⟨hA, hB, hr, hf, hp, hs, hc⟩
+    exact ⟨⟨hA, hB, hr, hf, hp, hs⟩, union_holds hA hB hr hf hp hc⟩
 
 /-! ### The frontier of the file -/
 
-/-- Per actor, the highest seq of a file. -/
-def frontOf (F : File A I P G) : A → Nat := front Rec.actor Rec.seq F.recs
+/-- The seq of a device's newest row, 0 with none. -/
+def rowSeq (rows : List (Row A I)) (a : A) : Nat := ((rowOf rows a).map Row.seq).getD 0
 
-theorem union_comm_front (F₁ F₂ : File A I P G) :
-    frontOf (union F₁ F₂) = frontOf (union F₂ F₁) :=
-  front_union_comm _ _ _ _
+/-- Per actor, the highest seq a file knows: its records, or the row a cut left when it kept none. -/
+def frontOf (F : File A I P G) (a : A) : Nat :=
+  max (rowSeq F.rows a) (front Rec.actor Rec.seq F.recs a)
 
-theorem union_assoc_front (F₁ F₂ F₃ : File A I P G) :
-    frontOf (union (union F₁ F₂) F₃) = frontOf (union F₁ (union F₂ F₃)) :=
-  front_union_assoc _ _ _ _ _
+/-- A device with records stands at them: a row is below every record of its device. -/
+theorem frontOf_kept (H : Holds W F₁) {a : A} {r : Rec A I P} (hr : r ∈ F₁.recs) (ha : r.actor = a) :
+    frontOf F₁ a = front Rec.actor Rec.seq F₁.recs a := by
+  have hle : r.seq ≤ front Rec.actor Rec.seq F₁.recs a :=
+    (front_le Rec.actor Rec.seq F₁.recs _ a).mp (Nat.le_refl _) r hr ha
+  have hrow : rowSeq F₁.rows a ≤ r.seq := by
+    unfold rowSeq
+    cases h : rowOf F₁.rows a with
+    | none => simp
+    | some f => have := past_own_row H h hr ha; simp; omega
+  exact Nat.max_eq_right (Nat.le_trans hrow hle)
 
-theorem union_idem_front (F : File A I P G) : frontOf (union F F) = frontOf F :=
-  front_union_idem _ _ _
+/-- HEADS AS A POINTWISE MAXIMUM, on one frontier (`CutOneSide` refuses the rest). -/
+theorem union_front_max (hrows : F₁.rows = F₂.rows) (a : A) :
+    frontOf (union F₁ F₂) a = max (frontOf F₁ a) (frontOf F₂ a) := by
+  show max (rowSeq F₁.rows a) (front Rec.actor Rec.seq (unionL F₁.recs F₂.recs) a) = _
+  rw [front_union_max]
+  simp only [frontOf, ← hrows]
+  omega
+
+theorem union_comm_front (hrows : F₁.rows = F₂.rows) (a : A) :
+    frontOf (union F₁ F₂) a = frontOf (union F₂ F₁) a := by
+  rw [union_front_max hrows, union_front_max hrows.symm, Nat.max_comm]
+
+theorem union_assoc_front (F₁ F₂ F₃ : File A I P G) (a : A) :
+    frontOf (union (union F₁ F₂) F₃) a = frontOf (union F₁ (union F₂ F₃)) a := by
+  show max (rowSeq F₁.rows a) (front Rec.actor Rec.seq (unionL (unionL F₁.recs F₂.recs) F₃.recs) a) =
+    max (rowSeq F₁.rows a) (front Rec.actor Rec.seq (unionL F₁.recs (unionL F₂.recs F₃.recs)) a)
+  rw [front_union_assoc]
+
+theorem union_idem_front (F : File A I P G) (a : A) : frontOf (union F F) a = frontOf F a := by
+  show max (rowSeq F.rows a) (front Rec.actor Rec.seq (unionL F.recs F.recs) a) = _
+  rw [front_union_idem]
+  rfl
+
+/-! ### Where this model and merge.rs differ
+
+  A theorem above says nothing past these lines. Each is a place the code does something the model
+  cannot state, read against crates/bebop-log/src/doc on 2026-11-01:
+
+  * NO ACTOR WITHOUT A KEY. `count.rs` judges only keyed actors, and `merge.rs` says `keyed` is not
+    monotone: a side's KEY row judges the other side's stranger in the union. That is the one way
+    `merge_into`'s last verify fails in the tests (`lean_tests.rs`, crates/dowiz-hub/tests/m2_union_not_whole.rs),
+    and `last_verify_is_collision` does not cover it: in the model every actor is judged on each side.
+  * THE SEAL CHAIN. Here `sealsOf` is a filter in file order and a seal has no link. The code walks
+    `prev` from a HEADS row, and `SealFork` exists because HEADS keeps one chain per device. So
+    `union_holds` needs no `NoSealFork`: two chains hold here and are refused there. `same_seal` also
+    compares `claimed_ms` and `alg`, which a model seal does not carry. `prevTip` is a free field
+    here; `seals.rs` derives it from the previous seal, or the device's own frontier row.
+  * THE ROW OF A DEVICE WITH NO KEPT SEAL. `frontOf` reads the SEG rows, which the union carries, so
+    `union_front_max` keeps such a device. HEADS is another table: `cut.rs` keeps its row with no seal,
+    and `stage_union` writes a row only for a chain with a last seal, so the union's HEADS has none.
+    Nothing here can state it: the model has no HEADS, and no writer that reads one.
+  * ONE FRONTIER IS MORE THAN ONE LIST OF ROWS. `CutOneSide` compares whole segments (`plain`: range,
+    root, counts, `seg_hash`); `Merges.rows` compares rows, so `Merges` accepts files the code refuses.
+  * ONE WORLD. Both sides are read under one `trusted`. `ForeignRoot`, `KeyClash` and the two genesis
+    tables have no statement here; the code compares the tables first and reads `theirs` under our roots.
+  * FORK AND FORGETONESIDE are one `NoFork`. The code tells them apart by id; tombstones, FORGOTTEN and
+    `LegacyTail` are outside the model.
+  * EVERY REVOKE IS EFFECTIVE here. `revoked` in merge.rs takes the REVOKEs each side's `verify` found
+    effective, in `settle.rs`'s fixpoint; a REVOKE by a keyless record stops nothing there
+    (`dc_a_non_effective_revoke_does_not_block_the_merge`) and has no form here. `after_seq` is a
+    Nat, so the negative `REVOKED_ALL` is `after` = 0 alone.
+  * A WALK STOPS AT A TIP HERE, and only at a non-record there: `Grounded.tip` accepts a `prev` that is a
+    frontier tip even if a record also has that id, where `unsealed` would go on through the record.
+  * `merges_bad`, `declared`, `tombs_foreign`, `keys_disagree`, anchors and the MERGE record itself
+    are not in `Holds`. `both_wrote` is the caller's, and a union here is never the file the caller seals.
+  * `Doc::tail_into` and `Front` (`tail.rs`, `front.rs`) are not modelled: this is `merge_into` alone.
+-/
 
 end Bebop.DocLog
 
@@ -316,4 +468,8 @@ end Bebop.DocLog
 #print axioms Bebop.DocLog.fork_breaks_union
 #print axioms Bebop.DocLog.merged_holds_iff
 #print axioms Bebop.DocLog.merges_iff
+#print axioms Bebop.DocLog.last_verify_is_collision
+#print axioms Bebop.DocLog.union_chain_seals
+#print axioms Bebop.DocLog.union_nothing_new
+#print axioms Bebop.DocLog.union_front_max
 #print axioms Bebop.DocLog.union_assoc_front
