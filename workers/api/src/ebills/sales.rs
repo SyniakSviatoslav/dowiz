@@ -20,6 +20,8 @@
 //! absent, not zero.
 
 use crate::hubdo::OrderView;
+use crate::services::analytics::side::Sides;
+use crate::services::analytics::split::Split;
 use crate::services::orders::status;
 use crate::services::ordering::{channel, fulfilment};
 use dowiz_hub::tz::{local_ms, start_of_local_day_ms, Zone};
@@ -86,7 +88,7 @@ fn n(v: &Value, path: &str) -> i64 {
 
 /// One line as the tab shows it. `code` is the till's `itemCode`: kept as
 /// `ebills_code` once matched, else still the `ebills:<code>` product id.
-fn line(it: &Value) -> Value {
+fn line(it: &Value, sides: &Sides) -> Value {
     let pid = s(it, "/product_id").unwrap_or("");
     let (code, product_id) = match (s(it, "/ebills_code"), pid.strip_prefix("ebills:")) {
         (Some(c), _) => (c, Some(pid)),
@@ -100,23 +102,28 @@ fn line(it: &Value) -> Value {
     json!({
         "code": code, "name": s(it, "/name").unwrap_or(""), "product_id": product_id, "matched_by": how,
         "quantity": n(it, "/quantity"), "unit_price": n(it, "/unit_price"), "discount_pct": n(it, "/discount_pct"), "cost": it.get("cost"),
+        // W-DRINKS-KITCHEN: the till's own group, and the side this line lands on (`None` = unclassified).
+        "till_category": it.get("ebills_category"), "side": sides.of_item(it).map(|x| x.key()),
     })
 }
 
 /// One order as the tab's row.
-fn row(o: &Value) -> Value {
+fn row(o: &Value, sides: &Sides) -> Value {
     json!({
         "id": s(o, "/id"), "sale_id": o.pointer("/external/sale_id"), "inv_ord_num": o.pointer("/external/inv_ord_num"),
         "fic": o.pointer("/external/fic"), "at_ms": n(o, "/created_at_ms"), "status": s(o, "/status"),
         "payment": s(o, "/payment"), "payment_status": o.get("payment_status"), "kind": fulfilment::of(o),
         "table": o.pointer("/fulfilment/table"), "operator_id": o.pointer("/external/operator_id"),
         "total": n(o, "/total"), "void_of": o.get("void_of"), "changed": o.get("ebills_changed").and_then(Value::as_bool).unwrap_or(false),
-        "items": o.get("items").and_then(Value::as_array).map(|a| a.iter().map(line).collect::<Vec<_>>()).unwrap_or_default(),
+        "items": o.get("items").and_then(Value::as_array).map(|a| a.iter().map(|it| line(it, sides)).collect::<Vec<_>>()).unwrap_or_default(),
     })
 }
 
-/// The whole tab: the rows and every number over them.
-pub(crate) fn month(listed: &[OrderView], zone: Zone, now: i64) -> Value {
+/// The whole tab: the rows and every number over them. `sides` is the
+/// venue's kitchen / drinks answer per dish (W-DRINKS-KITCHEN); each row's
+/// line carries its side, and `sides` in the answer is the split
+/// (`analytics::split`), the same accumulator the analytics pane uses.
+pub(crate) fn month(listed: &[OrderView], zone: Zone, now: i64, sides: &Sides) -> Value {
     let starts = day_starts(zone, now);
     let from = starts[0];
     let mut orders: Vec<Value> = listed
@@ -138,6 +145,8 @@ pub(crate) fn month(listed: &[OrderView], zone: Zone, now: i64) -> Value {
     let mut unmatched: BTreeMap<(String, String), (i64, i64)> = BTreeMap::new();
     let (mut total, mut not_taken, mut unpaid) = (Sum::default(), 0i64, 0i64);
     let (mut by_map, mut by_name, mut open, mut sold) = (Lines::default(), Lines::default(), Lines::default(), 0i64);
+    let mut split = Split::default();
+    let day_key = |at: i64| super::time::day_of(local_ms(zone, at));
 
     for o in &orders {
         let at = n(o, "/created_at_ms");
@@ -169,8 +178,9 @@ pub(crate) fn month(listed: &[OrderView], zone: Zone, now: i64) -> Value {
         if !counted {
             continue;
         }
+        split.add_order(o, &day_key(at), sides);
         for it in o.get("items").and_then(Value::as_array).into_iter().flatten() {
-            let l = line(it);
+            let l = line(it, sides);
             let (q, money) = (n(&l, "/quantity"), n(&l, "/quantity") * n(&l, "/unit_price"));
             let (code, name) = (s(&l, "/code").unwrap_or("").to_string(), s(&l, "/name").unwrap_or("").to_string());
             sold += money;
@@ -204,8 +214,10 @@ pub(crate) fn month(listed: &[OrderView], zone: Zone, now: i64) -> Value {
         v.sort_by(|a, b| b.1.orders.cmp(&a.1.orders).then_with(|| b.1.revenue.cmp(&a.1.revenue)).then_with(|| a.0.cmp(&b.0)));
         v.into_iter().map(|(k, sum)| { let mut j = sum.json(); j[key] = json!(k); j }).collect()
     };
+    let day_keys: Vec<String> = starts.iter().map(|at| day_key(*at)).collect();
     json!({
         "days": DAYS, "from_ms": from, "to_ms": now,
+        "sides": split.json(&day_keys, &day_keys[0], &day_keys[day_keys.len() - 1]),
         "count": total.orders, "counted": counted, "revenue": total.revenue,
         "average_check": if counted > 0 { total.revenue / counted } else { 0 },
         "not_taken": not_taken, "unpaid_courses": unpaid,
@@ -220,7 +232,7 @@ pub(crate) fn month(listed: &[OrderView], zone: Zone, now: i64) -> Value {
         "matched": { "map": by_map.json(), "name": by_name.json() },
         "unmatched": { "lines": open.lines, "quantity": open.quantity, "revenue": open.revenue,
                        "share_ppm": if sold > 0 { open.revenue * 1_000_000 / sold } else { 0 }, "names": unmatched },
-        "orders": orders.iter().map(row).collect::<Vec<_>>(),
+        "orders": orders.iter().map(|o| row(o, sides)).collect::<Vec<_>>(),
     })
 }
 

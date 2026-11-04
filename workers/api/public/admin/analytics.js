@@ -19,6 +19,7 @@ import { ui, btn, chips, loading, rowBtn, rowDiv, empty, pill, input } from '/ad
 import '/admin/analytics-i18n.js';
 import * as L from '/admin/analytics-logic.js';
 import { weekTopCard } from '/admin/menu-flags.js';
+import { sidesSection } from '/admin/analytics-sides.js'; // kitchen vs drinks (W-DRINKS-KITCHEN)
 
 const view = { p: { days: L.WINDOWS[0] }, a: null };
 const fail = e => toast(String(e.message || e));
@@ -97,6 +98,7 @@ function body(a){
       ${stat('avgCheck', esc(money(a.averageOrder || 0)), { n: dd.averageOrder, text: dd.averageOrder ? signed(dd.averageOrder) : '' })}${stat('rejected', esc(a.rejected ?? 0), null)}</div>
     ${ui.button({ variant: 'ghost', icon: 'chevron-right', label: { t: 'anDays' }, cls: 'mt-3', attrs: { data: { 'days-list': '1' } } })}
     ${weekTopCard(a.weekTop)}
+    ${sidesSection(a.sides, showDay)}
     <p class="muted small"><span data-t="anVsPrev"></span>: ${esc(pv.from || '')} - ${esc(pv.to || '')} · ${esc(pv.orders ?? 0)} · ${esc(money(pv.revenue || 0))}</p>
     <section class="group mt-3"><p class="eyebrow" data-t="anWeekday"></p><div class="rows">
       ${rowBtn({ leading: icon('clock'), title: `${weekdayName(wd.weekday || 0)} ${showDay(wd.day || a.to)}`, data: { day: wd.day || a.to }, sub: '<span data-t="anLastDay"></span>', trailing: `<b class="mono">${esc(wd.orders ?? 0)} · ${esc(money(wd.revenue || 0))}</b>` })}

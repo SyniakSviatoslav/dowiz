@@ -260,7 +260,31 @@ fn the_categories_answer_the_same_bytes() {
     let r = site.run(crate::catalog_edit::list_categories, get(&at("alpha", "/api/owner/categories")).bearer(&v.owner).on("alpha"), &[]);
     pin("categories", pinned(&r, &v.ids()), PIN_CATEGORIES);
 }
-const PIN_CATEGORIES: &str = r##"200 {"categories":[{"count":1,"id":"rolls","name":"Rolls","sortOrder":10}]}"##;
+const PIN_CATEGORIES: &str = r##"200 {"categories":[{"count":1,"id":"rolls","name":"Rolls","side":"kitchen","sideSet":false,"sortOrder":10}]}"##;
+
+/// THE OWNER'S KITCHEN / DRINKS FLAG (W-DRINKS-KITCHEN): set on the category, read back
+/// with `sideSet`, kept through a rename that does not mention it; a word that is neither
+/// side is refused with 400 and changes nothing.
+#[test]
+fn a_category_takes_the_side_the_owner_sets_and_keeps_it_through_a_rename() {
+    let site = Site::new();
+    let v = fixture(&site);
+    let set = |body: Value| site.run(crate::catalog_edit::set_category_at, post(&at("alpha", "/api/owner/categories"), &body).bearer(&v.owner).on("alpha"), &[]);
+    let list = || site.run(crate::catalog_edit::list_categories, get(&at("alpha", "/api/owner/categories")).bearer(&v.owner).on("alpha"), &[]);
+    let r = set(json!({"location_id": "alpha", "id": "rolls", "name": "Rolls", "side": "drinks"}));
+    ok(&r, "side = drinks");
+    assert_eq!(r.body_value()["side"], json!("drinks"));
+    pin("categories+side", pinned(&list(), &v.ids()), r##"200 {"categories":[{"count":1,"id":"rolls","name":"Rolls","side":"drinks","sideSet":true,"sortOrder":10}]}"##);
+    let r = set(json!({"location_id": "alpha", "id": "rolls", "name": "Rolls & more"}));
+    ok(&r, "rename without side");
+    assert_eq!(list().body_value()["categories"][0]["side"], json!("drinks"), "the flag survives a rename");
+    let r = set(json!({"location_id": "alpha", "id": "rolls", "name": "Rolls & more", "side": "bar-ish"}));
+    assert_eq!(r.status_code(), 400, "{}", r.body_str());
+    assert_eq!(list().body_value()["categories"][0]["side"], json!("drinks"), "a refused word changes nothing");
+    let r = set(json!({"location_id": "alpha", "id": "rolls", "name": "Rolls & more", "side": "kitchen"}));
+    ok(&r, "back to kitchen");
+    assert_eq!(list().body_value()["categories"][0]["sideSet"], json!(true), "set by the owner, even when it equals the default");
+}
 
 #[test]
 fn translations_are_checked_against_the_same_ids() {

@@ -10,6 +10,10 @@ pub mod handler;
 pub mod history;
 /// The kitchen's numbers: ingredients, dishes, losses, by day (card I7).
 pub mod kitchen;
+/// Kitchen or drinks: which side of the house a line was sold by (W-DRINKS-KITCHEN).
+pub mod side;
+/// The kitchen / drinks split added up, for the pane and the till tab.
+pub mod split;
 /// "Most ordered this week: N": the storefront badge and the owner's same number (W-MR0).
 pub mod week_top;
 /// Its public route, `GET /api/public/locations/:slug/menu/week`.

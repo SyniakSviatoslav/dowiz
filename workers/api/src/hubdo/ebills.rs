@@ -192,8 +192,11 @@ impl HubImages {
     /// the last `sales::DAYS` days and the numbers over them, in the venue's zone.
     async fn ebills_sales(&self, input: SalesIn) -> Result<Value> {
         let (_, listed) = self.orders_view().await?;
-        let zone = crate::services::analytics::handler::zone_of(&self.catalogue().await?);
-        Ok(crate::ebills::sales::month(&listed, zone, input.now_ms))
+        let cat = self.catalogue().await?;
+        let zone = crate::services::analytics::handler::zone_of(&cat);
+        // Kitchen or drinks per dish, from the catalogue's categories (W-DRINKS-KITCHEN).
+        let sides = crate::services::analytics::side::Sides::of(&cat);
+        Ok(crate::ebills::sales::month(&listed, zone, input.now_ms, &sides))
     }
 
     /// The owner's configuration (`glue::apply_config`); the password is

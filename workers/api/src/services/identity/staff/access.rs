@@ -230,7 +230,6 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
 pub(crate) const HANDED_BACK: &[(&str, &str)] = &[];
 
 // ── narrowing a shared screen ────────────────────────────────────────────────
-
 /// The kitchen numbers' money FROM SALES: what the venue took and kept, and
 /// food cost, which is a share of it. Removed at any depth, so a revenue field
 /// a later report grows under one of these names cannot reach a cook.

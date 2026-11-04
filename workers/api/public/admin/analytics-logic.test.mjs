@@ -2,7 +2,22 @@
 // arithmetic (W-HIST): words, ranges, the matrix's sentence, the trace filter.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { pct, fill, badRange, query, kitchenQuery, spark, heat, byQuadrant, advice, keep, csv, WINDOWS, channelName } from './analytics-logic.js';
+import { pct, fill, badRange, query, kitchenQuery, spark, heat, byQuadrant, advice, keep, csv, WINDOWS, channelName, share, sideBars } from './analytics-logic.js';
+
+test('a share is an unsigned percent with one decimal, and nothing sold is empty (W-DRINKS-KITCHEN)', () => {
+  assert.equal(share(485), '48.5%');
+  assert.equal(share(1000), '100.0%');
+  assert.equal(share(0), '0.0%');
+  assert.equal(share(null), '');
+  assert.equal(share(undefined), '');
+});
+
+test('kitchen and drinks bars share one scale: the tallest day of any side is 100', () => {
+  const h = sideBars([{ day: 'd1', kitchen: 4000, drinks: 1000, unclassified: 0 }, { day: 'd2', kitchen: 2000, drinks: 500, unclassified: 250 }]);
+  assert.deepEqual(h, { kitchen: [100, 50], drinks: [25, 13], unclassified: [0, 6] });
+  assert.deepEqual(sideBars([]), { kitchen: [], drinks: [], unclassified: [] });
+  assert.deepEqual(sideBars([{ day: 'd1' }]).kitchen, [0], 'a day with nothing is a zero bar, not NaN');
+});
 
 test('a change is a signed percent with one decimal, and nothing to compare is empty', () => {
   assert.equal(pct(1500), '+150.0%');

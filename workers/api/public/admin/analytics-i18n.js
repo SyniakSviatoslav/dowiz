@@ -33,6 +33,11 @@ export const WORDS = {
     mmUnknownDo: 'No cost: add its recipe and a priced delivery to see its margin. No cost is guessed.',
     mmBasis_stamped: 'cost stamped at sale', mmBasis_mixed: 'partly stamped, partly the recipe cost now', mmBasis_today: 'the recipe cost now',
     mmMargin: 'Margin a portion', mmMix: 'Share of portions', mmAvg: 'Average margin a portion',
+    anSides: 'Kitchen vs drinks', anSidesHint: 'The kitchen business and the bar business as two sets of numbers. A dish counts on the side of its category (set it in the categories sheet); a till line with no dish on the side of the till group, else by its name.',
+    an_kitchen: 'Kitchen', an_drinks: 'Drinks', an_unclassified: 'Unclassified', anPortions: 'portions',
+    anKitchenChecks: 'Checks with a kitchen dish', anDrinksOnlyChecks: 'Drinks-only checks', anUnclassifiedChecks: 'Checks with unclassified lines only',
+    anChecksFrom: 'Checks counted from', anSideDay: 'Sales by day', anSideTop: 'Top', anSideNone: 'Nothing sold on this side.',
+    anUnclassifiedHint: 'No rule places these lines: no dish, no till group, no known word in the name. Counted in revenue, shown here, never guessed onto a side. Map the till code to a dish, or set the side on the category.',
   },
   sq: {
     anQuarter: '90 ditë', anYear: '365 ditë', anCustom: 'Periudhë tjetër', anFrom: 'Nga', anTo: 'Deri', anApply: 'Shfaq',
@@ -60,6 +65,11 @@ export const WORDS = {
     mmUnknownDo: 'Pa kosto: shtoni recetën dhe një furnizim me çmim për të parë marzhin. Asnjë kosto nuk hamendësohet.',
     mmBasis_stamped: 'kosto e vulosur në shitje', mmBasis_mixed: 'pjesërisht e vulosur, pjesërisht kosto e recetës tani', mmBasis_today: 'kosto e recetës tani',
     mmMargin: 'Marzhi për porcion', mmMix: 'Pjesa e porcioneve', mmAvg: 'Marzhi mesatar për porcion',
+    anSides: 'Kuzhina kundrejt pijeve', anSidesHint: 'Biznesi i kuzhinës dhe ai i barit si dy grupe shifrash. Një pjatë numërohet në anën e kategorisë së saj (vendoseni te fleta e kategorive); një rresht i arkës pa pjatë në anën e grupit të arkës, përndryshe sipas emrit.',
+    an_kitchen: 'Kuzhina', an_drinks: 'Pijet', an_unclassified: 'Të paklasifikuara', anPortions: 'porcione',
+    anKitchenChecks: 'Fatura me një pjatë kuzhine', anDrinksOnlyChecks: 'Fatura vetëm me pije', anUnclassifiedChecks: 'Fatura vetëm me rreshta të paklasifikuar',
+    anChecksFrom: 'Faturat numërohen nga', anSideDay: 'Shitjet sipas ditës', anSideTop: 'Kryesoret', anSideNone: 'Asgjë e shitur në këtë anë.',
+    anUnclassifiedHint: 'Asnjë rregull nuk i vendos këto rreshta: pa pjatë, pa grup arke, pa fjalë të njohur në emër. Numërohen në të ardhura, shfaqen këtu, kurrë nuk hamendësohen në një anë. Lidhni kodin e arkës me një pjatë, ose vendosni anën te kategoria.',
   },
   uk: {
     anQuarter: '90 днів', anYear: '365 днів', anCustom: 'Інший період', anFrom: 'Від', anTo: 'До', anApply: 'Показати',
@@ -87,6 +97,11 @@ export const WORDS = {
     mmUnknownDo: 'Собівартості немає: додайте техкарту й поставку з ціною, щоб побачити маржу. Собівартість не вигадується.',
     mmBasis_stamped: 'собівартість, зафіксована при продажу', mmBasis_mixed: 'частково зафіксована, частково поточна за техкартою', mmBasis_today: 'поточна собівартість за техкартою',
     mmMargin: 'Маржа на порцію', mmMix: 'Частка порцій', mmAvg: 'Середня маржа на порцію',
+    anSides: 'Кухня і напої', anSidesHint: 'Бізнес кухні та бізнес бару як два набори цифр. Страва рахується на стороні своєї категорії (задайте її в аркуші категорій); рядок каси без страви - на стороні групи каси, інакше за назвою.',
+    an_kitchen: 'Кухня', an_drinks: 'Напої', an_unclassified: 'Без класу', anPortions: 'порцій',
+    anKitchenChecks: 'Чеки зі стравою кухні', anDrinksOnlyChecks: 'Чеки лише з напоями', anUnclassifiedChecks: 'Чеки лише з некласифікованими рядками',
+    anChecksFrom: 'Чеки враховано з', anSideDay: 'Продажі по днях', anSideTop: 'Топ', anSideNone: 'На цій стороні нічого не продано.',
+    anUnclassifiedHint: 'Жодне правило не відносить ці рядки: немає страви, групи каси й відомого слова в назві. Рахуються у виручці, показані тут, ніколи не вгадуються на сторону. Зіставте код каси зі стравою або задайте сторону категорії.',
   },
   ru: {
     anQuarter: '90 дней', anYear: '365 дней', anCustom: 'Другой период', anFrom: 'С', anTo: 'По', anApply: 'Показать',
@@ -114,6 +129,11 @@ export const WORDS = {
     mmUnknownDo: 'Себестоимости нет: добавьте техкарту и поставку с ценой, чтобы увидеть маржу. Себестоимость не выдумывается.',
     mmBasis_stamped: 'себестоимость, зафиксированная при продаже', mmBasis_mixed: 'частично зафиксированная, частично текущая по техкарте', mmBasis_today: 'текущая себестоимость по техкарте',
     mmMargin: 'Маржа на порцию', mmMix: 'Доля порций', mmAvg: 'Средняя маржа на порцию',
+    anSides: 'Кухня и напитки', anSidesHint: 'Бизнес кухни и бизнес бара как два набора цифр. Блюдо считается на стороне своей категории (задайте ее в листе категорий); строка кассы без блюда - на стороне группы кассы, иначе по названию.',
+    an_kitchen: 'Кухня', an_drinks: 'Напитки', an_unclassified: 'Без класса', anPortions: 'порций',
+    anKitchenChecks: 'Чеки с блюдом кухни', anDrinksOnlyChecks: 'Чеки только с напитками', anUnclassifiedChecks: 'Чеки только с неклассифицированными строками',
+    anChecksFrom: 'Чеки учтены с', anSideDay: 'Продажи по дням', anSideTop: 'Топ', anSideNone: 'На этой стороне ничего не продано.',
+    anUnclassifiedHint: 'Ни одно правило не относит эти строки: нет блюда, группы кассы и известного слова в названии. Считаются в выручке, показаны здесь, никогда не угадываются на сторону. Сопоставьте код кассы с блюдом или задайте сторону категории.',
   },
 };
 

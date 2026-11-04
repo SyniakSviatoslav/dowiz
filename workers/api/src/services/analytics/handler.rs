@@ -163,6 +163,9 @@ pub fn answer_with(
     // "Most ordered this week" (W-MR0): the storefront badge's own fold over the
     // same hot orders, so the pane and the badge cannot disagree. v2 only.
     out["weekTop"] = super::week_top::owner(&hot_orders, zone, now, &name);
+    // KITCHEN vs DRINKS (W-DRINKS-KITCHEN): lines from the hot orders and the
+    // archived rows of the period, checks from the hot orders (`split.rs`).
+    out["sides"] = super::split::period(&hot_orders, &rows, zone, s, now, &super::side::Sides::of(cat), &name);
     out["history"] = json!({ "archivedDays": rows.len(), "error": unread });
     out["currency"] = json!(crate::services::venue::currency_of(cat));
     Ok(out)

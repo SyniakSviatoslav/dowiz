@@ -40,10 +40,11 @@ fn the_month_tab_and_the_analytics_from_the_real_tills_answers() {
     let mut products: Vec<(String, String)> = Vec::new();
     for c in m["categories"].as_array().into_iter().flatten() {
         let cid = c["id"].as_str().unwrap_or("c").to_string();
-        cat.set_category(&cid, &json!({ "id": cid, "name": c["name"], "sort_order": c["sortOrder"] }).to_string());
+        // The keys the editor writes (`catalog_edit.rs`): `sortOrder`, `categoryId`.
+        cat.set_category(&cid, &json!({ "id": cid, "name": c["name"], "sortOrder": c["sortOrder"] }).to_string());
         for p in c["products"].as_array().into_iter().flatten() {
             let id = p["id"].as_str().unwrap_or("").to_string();
-            let mut pj = json!({ "id": id, "name": p["name"], "price": p["price"], "available": true, "category_id": cid });
+            let mut pj = json!({ "id": id, "name": p["name"], "price": p["price"], "available": true, "categoryId": cid });
             if recipe.as_deref() == Some(id.as_str()) {
                 pj["bom"] = json!([{ "supply": "qa-salmon", "qty": 40 }]);
             }
@@ -101,9 +102,20 @@ fn the_month_tab_and_the_analytics_from_the_real_tills_answers() {
 
     // WHAT THE ROUTES WOULD ANSWER.
     std::fs::create_dir_all(&out).unwrap();
-    let tab = sales::month(&listed, DEFAULT, now);
+    let sides = crate::services::analytics::side::Sides::of(&cat);
+    let tab = sales::month(&listed, DEFAULT, now, &sides);
     println!("tab: {} orders in 30 days, revenue {}, average check {}, unmatched share {} ppm, {} unmatched names", tab["count"], tab["revenue"], tab["average_check"], tab["unmatched"]["share_ppm"], tab["unmatched"]["names"].as_array().map_or(0, Vec::len));
+    // W-DRINKS-KITCHEN: the split the owner asked for, as the tab answers it.
+    let sp = &tab["sides"];
+    for k in ["kitchen", "drinks", "unclassified"] {
+        println!("sides.{k}: sales {} ({} pm), quantity {}, top {}", sp[k]["sales"], sp[k]["sharePm"], sp[k]["quantity"], sp[k]["top"].as_array().map_or(0, Vec::len));
+    }
+    for k in ["kitchen", "drinksOnly", "unclassified"] {
+        println!("checks.{k}: {} orders, revenue {}, average check {}", sp["orders"][k]["orders"], sp["orders"][k]["revenue"], sp["orders"][k]["averageCheck"]);
+    }
     std::fs::write(format!("{out}/tab.json"), tab.to_string()).unwrap();
+    // The categories sheet's answer (`catalog_edit::categories_view`), for the stand-in.
+    std::fs::write(format!("{out}/categories.json"), crate::catalog_edit::categories_view(&cat).to_string()).unwrap();
     let cold = |_: i64, _: i64| Ok(std::collections::BTreeMap::new());
     let v2 = crate::services::analytics::handler::answer_with(listed.clone(), &cat, LOC, now, (Some("30"), None, None), &cold).expect("analytics");
     println!("analytics(30d): orders {}, revenue {}, channels {}", v2["orders"], v2["revenue"], v2["channels"]);

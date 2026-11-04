@@ -13,7 +13,7 @@ import '/admin/wire-i18n.js';
 import { lang, LANGS } from '/admin/i18n.js';
 import { loadVenue, rerender } from '/admin/app.js';
 import { publishedFields, FIELDS } from '/lib/dish-edit.js';
-import { ui, k, btn, iconBtn, field, input, select, chips, press, pill, empty, loading, rowBtn, rowDiv, check } from '/admin/parts.js';
+import { ui, k, btn, iconBtn, field, input, select, chips, press, pill, pillBtn, empty, loading, rowBtn, rowDiv, check } from '/admin/parts.js';
 import '/admin/ingredients-i18n.js';
 import * as IC from '/admin/ingredients-calc.js';
 import { parseMilli, showMilli, wireQty, toMilli, MILLI } from '/admin/qty-adapter.js';
@@ -362,7 +362,8 @@ async function openNewDish(){
 async function openCategories(){
   const cats = await allCategories();
   sheet(`<p class="eyebrow" data-t="tabMenu"></p><h2 data-t="categories"></h2><p class="sheet-hint" data-t="ap_h_categories"></p>
-    <div class="rows">${cats.map(c => rowDiv({ title: '', sub: `${ui.inputRow({ label: k('name'), cls: 'inline', attrs: { value: c.name, data: { cn: c.id, tour: 'category.name' } } })}<span class="mono">${c.count ?? 0} · <span data-t="dishes"></span></span>`,
+    <div class="rows">${cats.map(c => rowDiv({ title: '', sub: `${ui.inputRow({ label: k('name'), cls: 'inline', attrs: { value: c.name, data: { cn: c.id, tour: 'category.name' } } })}<span class="mono">${c.count ?? 0} · <span data-t="dishes"></span></span>
+        <span class="chips mt-1"><small class="muted" data-t="sideHint"></small>${pillBtn(c.side === 'kitchen' ? 'accent' : '', { key: 'sideKitchen', icon: 'bowl-chopsticks', selected: c.side === 'kitchen', data: { cside: c.id, sv: 'kitchen' } })}${pillBtn(c.side === 'drinks' ? 'accent' : '', { key: 'sideDrinks', icon: 'cup', selected: c.side === 'drinks', data: { cside: c.id, sv: 'drinks' } })}${c.sideSet ? '' : '<small class="muted" data-t="sideAuto"></small>'}</span>`,
       trailing: `${iconBtn({ icon: 'chevron-up', ariaKey: 'moveUp', data: { cu: c.id } })}${iconBtn({ icon: 'chevron-down', ariaKey: 'moveDown', data: { cdn: c.id } })}${iconBtn({ icon: 'check', ariaKey: 'save', data: { cs: c.id }, tour: 'category.save' })}${iconBtn({ icon: 'trash', ariaKey: 'remove', disabled: !!c.count && !!me().staff, data: { cd: c.id, cn2: String(c.count ?? 0) }, tour: 'category.remove' })}` })).join('')}</div>
     <div class="grid2 mt-3">${field({ id: 'nc-name', key: 'addCategory', autocomplete: 'off', tour: 'menu.newCategory' })}${btn({ id: 'ncGo', variant: 'primary', icon: 'plus', key: 'add', tour: 'menu.addCategory' })}</div>
     <div class="btn-row">${btn({ id: 'ncWords', icon: 'language', key: 'w_catWords' })}</div>`, { name: 'cats' });
@@ -375,6 +376,11 @@ async function openCategories(){
   const nudgeCat = async (b, id, dir) => { try { await busy(b, () => post('/owner/categories', withLoc({ id, name: names[id] || id, move: dir }))); await loadVenue(); openCategories(); redrawWhenClosed(); } catch (e) { fail(e); } };
   for (const b of $$('[data-cu]', $('#sheetIn'))) b.onclick = () => nudgeCat(b, b.dataset.cu, 'up');
   for (const b of $$('[data-cdn]', $('#sheetIn'))) b.onclick = () => nudgeCat(b, b.dataset.cdn, 'down');
+  // W-DRINKS-KITCHEN: which side of the house this category counts on in the owner's numbers; the stored name travels with it.
+  for (const b of $$('[data-cside]', $('#sheetIn'))) b.onclick = async () => {
+    const id = b.dataset.cside;
+    try { await busy(b, () => post('/owner/categories', withLoc({ id, name: names[id] || id, side: b.dataset.sv }))); toast(t('saved')); await loadVenue(); openCategories(); redrawWhenClosed(); } catch (e) { fail(e); }
+  };
   // W-NOM: a category WITH dishes goes too, once the owner has seen how many.
   for (const b of $$('[data-cd]', $('#sheetIn'))) b.onclick = async () => {
     const n = Number(b.dataset.cn2) || 0, name = $(`[data-cn="${b.dataset.cd}"]`).value;

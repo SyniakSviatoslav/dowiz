@@ -305,6 +305,22 @@ fn the_same_sale_twice_is_the_same_id() {
     assert_eq!(a, b, "a pure map: same bytes in, same envelope out");
 }
 
+/// THE TILL'S OWN GROUP RIDES ON THE LINE (W-DRINKS-KITCHEN): `itemInSale.itemCategory.category`,
+/// measured on every sale record of the last 30 days, is kept as `ebills_category`; a record
+/// without one (the fixture, as the first measurement had it) writes no such key.
+#[test]
+fn a_line_keeps_the_tills_item_category_when_the_till_names_one() {
+    let with = course_with(|v| v["saleRecords"][0]["itemInSale"]["itemCategory"] = json!({ "id": 1, "category": " kafeteria ", "notes": null, "status": "ACTIVE" }));
+    let o = to_order(&with, "loc").unwrap();
+    assert_eq!(o["items"][0]["ebills_category"], json!("kafeteria"), "trimmed, as the till spells it");
+    let without = to_order(&course_sale(), "loc").unwrap();
+    assert!(without["items"][0].get("ebills_category").is_none(), "no group, no key");
+    let blank = course_with(|v| v["saleRecords"][0]["itemInSale"]["itemCategory"] = json!({ "id": 1, "category": "  " }));
+    assert!(to_order(&blank, "loc").unwrap()["items"][0].get("ebills_category").is_none(), "a blank group is no group");
+    let null_cat = course_with(|v| v["saleRecords"][0]["itemInSale"]["itemCategory"] = json!({ "id": 1, "category": null }));
+    assert!(to_order(&null_cat, "loc").unwrap()["items"][0].get("ebills_category").is_none());
+}
+
 #[test]
 fn a_counter_sale_is_collected_not_seated() {
     let s = course_with(|v| {

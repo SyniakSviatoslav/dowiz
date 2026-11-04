@@ -17,6 +17,10 @@ use crate::services::catalogue::import::bump_menu_version;
 /// Many dishes, and a category with its dishes (W-NOM).
 mod remove;
 pub(crate) use remove::{delete_category_at, delete_products_at};
+/// The owner's category list, with each one's kitchen / drinks side (W-DRINKS-KITCHEN).
+mod categories;
+pub use categories::list_categories;
+pub(crate) use categories::categories_view;
 /// The Worker's half of every edit here: the whole request to the venue's object (W-D9).
 pub(crate) mod routed;
 pub use routed::{create_product, delete_category, delete_product, delete_products, set_category};
@@ -185,6 +189,12 @@ struct CategoryIn {
     /// `up` or `down`: one place among the venue's categories (W-CRUD).
     #[serde(default, rename = "move")]
     nudge: Option<String>,
+    /// `kitchen` or `drinks` (W-DRINKS-KITCHEN): which side of the house
+    /// this category's dishes count on in the owner's numbers. Absent keeps
+    /// what is stored; a record without one reads by its name
+    /// (`analytics::side::category_default`).
+    #[serde(default)]
+    side: Option<String>,
 }
 
 /// `POST /api/owner/categories` — make one, or rename / reorder one by id.
@@ -211,11 +221,20 @@ pub(crate) async fn set_category_at(mut req: Request, ctx: RouteContext<crate::R
     if name.is_empty() || name.chars().count() > NAME_MAX {
         return Response::error("a category needs a name", 400);
     }
+    let side = match body.side.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+        None => None,
+        Some(s) => match crate::services::analytics::side::Side::parse(s) {
+            Some(side) => Some(side),
+            None => return Response::error("side is kitchen or drinks", 400),
+        },
+    };
     let rec = crate::hubstore::with_catalog(&place, move |cat| {
         let cats = cat.categories();
         let existing = body.id.as_deref().map(str::trim).filter(|s| !s.is_empty()).and_then(|id| {
             cats.iter().find(|(c, _)| c == id).map(|(c, j)| (c.clone(), serde_json::from_str::<Value>(j).unwrap_or(json!({}))))
         });
+        // The stored flag survives a rename or a move; only an explicit `side` changes it.
+        let kept_side = existing.as_ref().and_then(|(_, old)| old.get("side").and_then(Value::as_str).and_then(crate::services::analytics::side::Side::parse));
         let (id, sort) = match existing {
             Some((id, old)) => (id, body.sort_order.or_else(|| old.get("sortOrder").and_then(Value::as_i64)).unwrap_or(0)),
             None => {
@@ -227,6 +246,9 @@ pub(crate) async fn set_category_at(mut req: Request, ctx: RouteContext<crate::R
             }
         };
         let mut rec = json!({ "id": id, "name": name, "sortOrder": sort });
+        if let Some(s) = side.or(kept_side) {
+            rec["side"] = json!(s.key());
+        }
         cat.set_category(&id, &rec.to_string());
         if let Some(m) = nudge {
             let after = order::nudge_category(cat, &id, m).map_err(Error::RustError)?;
@@ -260,39 +282,4 @@ mod tests {
         assert_eq!(free_id(|_| false, "!!!", None).as_deref(), Some("item"));
         assert_eq!(free_id(|_| false, "x", Some("my-id")).as_deref(), Some("my-id"));
     }
-}
-
-
-/// `GET /api/owner/categories` — every category, EMPTY ONES INCLUDED, with
-/// its dish count. The public menu drops a category with nothing to sell,
-/// which is right for a customer and wrong for the owner about to put the
-/// first dish into it.
-pub async fn list_categories(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
-    let loc = match crate::services::identity::staff::guard::staff_venue(&req, &ctx, &crate::services::identity::staff::guard::MENU).await {
-        Ok((_, l)) => l,
-        Err(r) => return Ok(r),
-    };
-    // The venue this caller was authorised for, and no other.
-    let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
-    // DERIVED IN THE OBJECT (BN1, `/fold/catalogue?q=categories`): the list is
-    // built there by `categories_view` and the list alone crosses the hop.
-    Response::from_json(&crate::fold::ask::catalogue(&place, "q=categories").await?)
-}
-
-/// Every category with its dish count, EMPTY ONES INCLUDED, sorted as the
-/// owner ordered them. PURE: the venue's object answers
-/// `/fold/catalogue?q=categories` with it.
-pub(crate) fn categories_view(cat: &dowiz_hub::catalog::Catalog) -> Value {
-    let products: Vec<Value> = cat.products().iter().filter_map(|(_, j)| serde_json::from_str(j).ok()).collect();
-    let mut cats: Vec<Value> = cat
-        .categories()
-        .iter()
-        .filter_map(|(id, j)| {
-            let c: Value = serde_json::from_str(j).ok()?;
-            let n = products.iter().filter(|p| p.get("categoryId").and_then(Value::as_str) == Some(id.as_str())).count();
-            Some(json!({ "id": id, "name": c.get("name").cloned().unwrap_or(json!(id)), "sortOrder": c.get("sortOrder").and_then(Value::as_i64).unwrap_or(0), "count": n }))
-        })
-        .collect();
-    cats.sort_by_key(|c| c.get("sortOrder").and_then(Value::as_i64).unwrap_or(0));
-    json!({ "categories": cats })
 }

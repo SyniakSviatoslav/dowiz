@@ -109,6 +109,19 @@ pub(crate) struct SaleRecord {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ItemRef {
     pub(crate) item_code: Option<String>,
+    /// The till's own item group (MEASURED 2026-11-04: on every one of 4,858
+    /// sale records of the last 30 days -- "Sushi", "alkool", "kafeteria",
+    /// "freskuese", "Cocktail", "birra", "Lengje Frutash", "sweet", "Shisha").
+    /// Kept on the line as `ebills_category`, so a till line no dish answers
+    /// to still lands on the kitchen or the bar side (`analytics::side`).
+    #[serde(default)]
+    pub(crate) item_category: Option<ItemCategory>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ItemCategory {
+    #[serde(default)]
+    pub(crate) category: Option<String>,
 }
 
 /// One row of the fiscalisation log. `iic` is the issuer's hash, `fic` the

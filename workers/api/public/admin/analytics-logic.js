@@ -23,6 +23,23 @@ export function pct(pm){
 /// The tone of a change: up is good for money and orders.
 export const tone = d => (d > 0 ? 'ok' : d < 0 ? 'bad' : '');
 
+/// A share in per mille as an unsigned percent with one decimal: 485 -> "48.5%";
+/// `null` (nothing sold) is an empty string, never "0%".
+export function share(pm){
+  if (pm == null || !Number.isFinite(pm)) return '';
+  const a = Math.abs(Math.trunc(pm));
+  return Math.trunc(a / 10) + '.' + (a % 10) + '%';
+}
+
+/// KITCHEN vs DRINKS by day (W-DRINKS-KITCHEN): bar heights 0..100 per side,
+/// ALL against the tallest day of ANY side, so the kitchen row and the drinks
+/// row read on one scale (a bar half as tall is half the money).
+export function sideBars(byDay){
+  const sides = ['kitchen', 'drinks', 'unclassified'];
+  const max = Math.max(1, ...(byDay || []).flatMap(d => sides.map(s => Number(d[s]) || 0)));
+  return Object.fromEntries(sides.map(s => [s, (byDay || []).map(d => Math.round((100 * (Number(d[s]) || 0)) / max))]));
+}
+
 /// `{name}` placeholders filled from `params`; an unknown one stays visible.
 export function fill(template, params = {}){
   return String(template || '').replace(/\{(\w+)\}/g, (m, k) => (params[k] == null ? m : String(params[k])));

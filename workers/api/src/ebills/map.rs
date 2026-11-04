@@ -57,11 +57,17 @@ fn line(i: usize, r: &SaleRecord, void: bool) -> Result<(Value, i64), MapError> 
         return Err(MapError::LineMismatch { line: i, expected: expected.unwrap_or(-1), got });
     }
     let code = r.item_in_sale.as_ref().and_then(|x| x.item_code.as_deref());
-    let item = json!({
+    let mut item = json!({
         "product_id": code.map(|c| format!("ebills:{c}")), "name": r.item_name,
         "quantity": quantity, "unit_price": unit_price, "modifier_ids": [],
         "vat_rate_pct": vat_pct(r.vat.as_deref()), "discount_pct": pct,
     });
+    // THE TILL'S OWN GROUP, when it names one (W-DRINKS-KITCHEN): a line
+    // placed before 2026-11-04 has none, and its reader (`analytics::side`)
+    // falls back to the line's name -- the log is never rewritten.
+    if let Some(c) = r.item_in_sale.as_ref().and_then(|x| x.item_category.as_ref()).and_then(|c| c.category.as_deref()).filter(|c| !c.trim().is_empty()) {
+        item["ebills_category"] = json!(c.trim());
+    }
     Ok((item, got))
 }
 

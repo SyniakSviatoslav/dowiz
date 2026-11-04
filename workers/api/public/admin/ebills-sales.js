@@ -15,6 +15,7 @@ import { intlLocale } from '/admin/i18n.js';
 import { ui, k, btn, chips, field, loading, rowBtn, rowDiv, empty, pill } from '/admin/parts.js';
 import '/admin/ebills-sales-i18n.js';
 import * as L from '/admin/ebills-sales-logic.js';
+import { sidesSection } from '/admin/analytics-sides.js'; // kitchen vs drinks (W-DRINKS-KITCHEN), the pane's own section
 import { REFUSED } from '/lib/vocab.js'; // the kernel's own took-no-money set, as orders.js reads it
 
 const view = { d: null, mode: 'list', q: '', day: null };
@@ -54,7 +55,8 @@ function numbers(d){
   const kinds = d.by_kind || {};
   const m = d.matched || {}, u = d.unmatched || {};
   return `
-    <p class="eyebrow" data-t="es_byDay"></p><div class="bars" role="img" aria-label="${esc(t('es_byDay'))}">${byDay.map((x, i) => `<i data-day="${esc(x.day)}" data-h="${hDay[i]}" title="${showDay(x.day)} · ${esc(x.orders)} · ${esc(money(x.revenue || 0))}"></i>`).join('')}</div>
+    ${sidesSection(d.sides, showDay)}
+    <p class="eyebrow mt-3" data-t="es_byDay"></p><div class="bars" role="img" aria-label="${esc(t('es_byDay'))}">${byDay.map((x, i) => `<i data-day="${esc(x.day)}" data-h="${hDay[i]}" title="${showDay(x.day)} · ${esc(x.orders)} · ${esc(money(x.revenue || 0))}"></i>`).join('')}</div>
     <div class="axis"><span>${showDay(byDay[0]?.day)}</span><span>${showDay(byDay[byDay.length - 1]?.day)}</span></div>
     <p class="eyebrow mt-3" data-t="es_byHour"></p><div class="bars" role="img" aria-label="${esc(t('es_byHour'))}">${byHour.map((x, h) => `<i data-h="${hHour[h]}" class="${hHour[h] === 100 && x.orders ? 'hi' : ''}" title="${hh(h)}:00 · ${esc(x.orders)} · ${esc(money(x.revenue || 0))}"></i>`).join('')}</div>
     <div class="axis"><span>00</span><span>12</span><span>23</span></div>
@@ -120,7 +122,7 @@ function detail(id){
     ${r.changed ? `<div class="fact">${icon('alert-triangle')}<span class="v" data-t="es_changed"></span></div>` : ''}
     ${r.void_of ? `<div class="fact">${icon('x')}<span class="v"><span class="k" data-t="es_void"></span><span class="mono">${esc(r.void_of)}</span></span></div>` : ''}
     <p class="eyebrow mt-3" data-t="items"></p>
-    ${(r.items || []).map(it => `<div class="line"><span class="q">${esc(it.quantity)}×</span><span class="n">${esc(it.name || it.code)}<small><span class="mono">${esc(it.code)}</span> · ${pill(it.product_id ? 'ok' : 'warn', { key: { map: 'es_matchedMap', name: 'es_matchedName', open: 'es_open' }[L.matchOf(it)] })}${it.discount_pct ? ` · −${esc(it.discount_pct)}%` : ''}</small></span>${moneyEl(it.quantity * it.unit_price)}</div>`).join('')}
+    ${(r.items || []).map(it => `<div class="line"><span class="q">${esc(it.quantity)}×</span><span class="n">${esc(it.name || it.code)}<small><span class="mono">${esc(it.code)}</span> · ${pill(it.product_id ? 'ok' : 'warn', { key: { map: 'es_matchedMap', name: 'es_matchedName', open: 'es_open' }[L.matchOf(it)] })} · ${pill(it.side ? '' : 'warn', { key: 'an_' + (it.side || 'unclassified') })}${it.till_category ? ` <span class="mono">${esc(it.till_category)}</span>` : ''}${it.discount_pct ? ` · −${esc(it.discount_pct)}%` : ''}</small></span>${moneyEl(it.quantity * it.unit_price)}</div>`).join('')}
     <div class="line total"><span class="n" data-t="total"></span>${moneyEl(r.total ?? 0)}</div>
     <p class="muted small mt-3">${esc(ago(r.at_ms))} · <span data-t-st="${esc(r.status || '')}"></span></p>
     <div class="btn-row">${btn({ id: 'esBack', variant: 'ghost', icon: 'chevron-left', key: 'es_list' })}</div>`, { name: 'ebillsSale' });
