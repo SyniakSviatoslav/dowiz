@@ -130,6 +130,58 @@ fn refresh(site: &Site, rt: &str) -> crate::wire::Reply {
     site.run(crate::accounts::owner_refresh, post(&at("alpha", "/api/auth/refresh"), &json!({"refresh_token": rt})).on("alpha"), &[])
 }
 
+fn login_at(site: &Site, slug: &str, email: &str) -> serde_json::Value {
+    site.run(
+        crate::accounts::owner_login,
+        post(&at(slug, "/api/auth/login"), &json!({"email": email, "password": "owner-password-1"})).on(slug),
+        &[],
+    )
+    .body_value()
+}
+
+/// This account's refresh records, as the sessions image holds them.
+fn refresh_records_of(site: &Site, user_id: &str) -> usize {
+    let t = crate::edge::mem::block_on(crate::identity_store::sessions(&site.env())).expect("sessions");
+    t.all(crate::identity_store::K_REFRESH)
+        .into_iter()
+        .filter(|(_, j)| {
+            serde_json::from_str::<serde_json::Value>(j)
+                .ok()
+                .is_some_and(|v| crate::identity_store::s_of(&v, "user_id") == user_id)
+        })
+        .count()
+}
+
+#[test]
+fn a_login_keeps_twenty_refresh_records_per_account_and_sweeps_the_expired_ones_of_everyone() {
+    // W-LOGIN-CPU 2026-11-04: the sessions image grew by one record per sign-in and every login
+    // loaded, verified and rewrote all of it -- 23-69 ms of CPU on the live Worker before argon2.
+    let mut site = Site::new();
+    site.venue("alpha", "a@x.test");
+    site.venue("beta", "b@x.test");
+    let a = login_at(&site, "alpha", "a@x.test")["user"]["id"].as_str().expect("a").to_string();
+    let b = login_at(&site, "beta", "b@x.test")["user"]["id"].as_str().expect("b").to_string();
+    assert_eq!(refresh_records_of(&site, &a), 2, "venue() signed in once, then this test once");
+    // Thirty more sign-ins by alpha's owner, a minute apart: twenty remain, the newest ones.
+    for _ in 0..30 {
+        site.now_ms += 60_000;
+        login_full(&site);
+    }
+    assert_eq!(refresh_records_of(&site, &a), crate::accounts::REFRESH_RECORDS_KEPT);
+    // Beta's owner was not touched: two live records, not alpha's and not expired.
+    assert_eq!(refresh_records_of(&site, &b), 2);
+    // The newest token is among the kept and still rotates.
+    site.now_ms += 60_000;
+    let rt = login_full(&site)["refresh_token"].as_str().expect("refresh").to_string();
+    assert_eq!(refresh(&site, &rt).status_code(), 200);
+    // Thirty-one days on, every record so far has expired (idle window 30 d): ONE sign-in by
+    // alpha's owner sweeps beta's too, and alpha keeps only the record it just wrote.
+    site.now_ms += 31 * DAY_MS;
+    login_full(&site);
+    assert_eq!(refresh_records_of(&site, &b), 0, "expired records go whoever they belong to");
+    assert_eq!(refresh_records_of(&site, &a), 1);
+}
+
 #[test]
 fn a_refresh_token_still_works_after_twenty_quiet_days() {
     // The idle window is 30 days (auth::REFRESH_IDLE_MS): an owner back from a three-week holiday is still signed in.

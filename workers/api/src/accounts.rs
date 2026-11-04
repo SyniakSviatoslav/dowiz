@@ -97,10 +97,53 @@ async fn issue_owner_refresh(
             h.clone(),
         )];
         t.put(crate::identity_store::K_REFRESH, &h, &rec, &index, &[])
-            .map_err(|e| Error::RustError(format!("refresh: {e}")))
+            .map_err(|e| Error::RustError(format!("refresh: {e}")))?;
+        sweep_refresh(t, &u, &h, now);
+        Ok(())
     })
     .await?;
     Ok(Some(tok))
+}
+
+/// How many refresh records one account keeps: the newest, by issue time.
+///
+/// THE SESSIONS IMAGE IS A `Table`, AND A TABLE MUST NOT GROW WITH USAGE (`dowiz_hub::table`,
+/// "COST"): every save rewrites it whole and every load CRC-checks every object. Every sign-in
+/// wrote a refresh record that lived its thirty idle days whether or not the device ever came
+/// back, so the image grew by one record per login and each login then loaded, verified and
+/// rewrote all of it. Measured 2026-11-04 on the live Worker (W-LOGIN-CPU): the sessions round
+/// trip ALONE -- `POST /api/auth/refresh` with a bogus token, no argon2 -- cost 23-69 ms of CPU
+/// against the Free plan's 10 ms, and a login 68-195 ms, killed with error 1102 about as often as
+/// it answered. Twenty is ten devices with the predecessor each rotation keeps for reuse
+/// detection; the twenty-first-oldest record is a device not seen for twenty sign-ins or
+/// rotations of this account, and it is signed out.
+pub const REFRESH_RECORDS_KEPT: usize = 20;
+/// How many records one write LOOKS AT, so that a login never pays for the whole backlog at once
+/// -- a sweep that cannot finish inside the CPU budget never lands, and the image would stay as
+/// it is. Expired records in the window go whoever they belong to; the window moves as they do.
+pub const REFRESH_SWEEP_PER_WRITE: usize = 512;
+
+/// After writing `kept` for `user_id`: drop the expired records in the window, and this account's
+/// records beyond the newest `REFRESH_RECORDS_KEPT`. An expired record is already refused by
+/// `auth::slide`; what its removal gives up is reuse detection on a token that was expired anyway.
+fn sweep_refresh(t: &mut dowiz_hub::table::Table, user_id: &str, kept: &str, now: i64) {
+    let mut mine: Vec<(i64, String)> = Vec::new();
+    for (id, j) in t.all(crate::identity_store::K_REFRESH).into_iter().take(REFRESH_SWEEP_PER_WRITE) {
+        if id == kept {
+            continue;
+        }
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&j) else { continue };
+        if crate::identity_store::i_of(&v, "expires_at_ms") <= now {
+            t.remove(crate::identity_store::K_REFRESH, &id);
+        } else if crate::identity_store::s_of(&v, "user_id") == user_id {
+            mine.push((crate::identity_store::i_of(&v, "created_at_ms"), id));
+        }
+    }
+    // Newest first; the record just written is the first of the kept.
+    mine.sort_by(|a, b| b.0.cmp(&a.0));
+    for (_, id) in mine.into_iter().skip(REFRESH_RECORDS_KEPT - 1) {
+        t.remove(crate::identity_store::K_REFRESH, &id);
+    }
 }
 
 /// Rewrite a password hash that was stored at a cost this Worker can no longer
