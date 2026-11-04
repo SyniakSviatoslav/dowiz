@@ -48,6 +48,14 @@ pub(crate) enum Fail {
     NotAllowed(String),
     /// The venue's own object refused a command: not ebills' fault.
     Hub(u16, String),
+    /// THE FIRING'S OWN CEILING (`fetch::TURN_BUDGET`, W-EBILLS-POISON): this
+    /// many requests have left in one alarm turn, and the next is refused
+    /// unsent. The plan's paths sum to 42 at most (login 2, floor, list,
+    /// history, 20 details, 5 retries, the week's list and the menu, 10
+    /// re-checks); the Free plan allows 50 subrequests an invocation and the
+    /// outbox and the error log share them. A turn that stops here imported
+    /// what it read and is named in the health line, never silently cut.
+    Budget(u32),
 }
 
 impl Fail {
@@ -64,6 +72,7 @@ impl Fail {
             Fail::Shape(m) => format!("ebills changed its answer: {m}"),
             Fail::NotAllowed(u) => format!("refused to send a request off the allow-list: {u}"),
             Fail::Hub(s, m) => format!("the venue's hub refused ({s}): {m}"),
+            Fail::Budget(n) => format!("this firing's request budget is spent ({n} sent); the rest waits for the next"),
         }
     }
 

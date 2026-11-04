@@ -80,7 +80,14 @@ WAITLIST_FROM = "waitlist@dowiz.org"
 # named by the first 16 hex of `sha256sum build/index_bg.wasm` (what shipped),
 # for symbolising a Workers Logs stack trace. `&&`: a failed strip fails the
 # build, so nothing half-written is uploaded.
-command = "worker-build --release && node scripts/strip-wasm.mjs build/index_bg.wasm --keep build/unstripped"
+# THEN THE GUARD (W-EBILLS-POISON, incident 2026-11-04): scripts/harden-shim.mjs
+# rewrites wasm-bindgen's termination guard in build/index.js so a terminated
+# wasm instance is REINITIALISED and its cause LOGGED instead of every later
+# request answering 500 "Module terminated" until the isolate dies. The script
+# REFUSES (exit 1, nothing written) when the generated guard has changed shape,
+# so a worker-build or wasm-bindgen upgrade fails the build loudly rather than
+# shipping without the guard.
+command = "worker-build --release && node scripts/strip-wasm.mjs build/index_bg.wasm --keep build/unstripped && node scripts/harden-shim.mjs build/index.js"
 
 # THE BELL FOR THE WAITING LIST. `send_email` needs Email Routing ENABLED on
 # the dowiz.org zone and WAITLIST_TO VERIFIED as a destination address there

@@ -267,3 +267,7 @@ mod ordinary;
 /// A first run backfills the till's last month, once (`history_tests.rs`).
 #[path = "history_tests.rs"]
 mod history;
+
+/// The real month's answers through the real alarm turn, natively (`month_tests.rs`, `#[ignore]`d).
+#[path = "month_tests.rs"]
+mod month;

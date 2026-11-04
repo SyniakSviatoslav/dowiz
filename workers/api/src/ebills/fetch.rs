@@ -79,26 +79,50 @@ async fn native(w: &Wire) -> Result<Answer> {
     })
 }
 
+/// THE MOST REQUESTS ONE CLIENT SENDS IN ONE FIRING (W-EBILLS-POISON,
+/// 2026-11-04). The poll's paths add up to 42 (`judge::Fail::Budget`), the
+/// Free plan stops an invocation at 50 subrequests, and the alarm turn that
+/// runs the poll also drains the outbox and writes the error log. Measured
+/// on the real month of a real till through the real alarm turn
+/// (`flow/month_tests.rs`): the busiest turn sent 27. The 41st request of a
+/// firing is refused UNSENT with a named failure, so no path added later can
+/// walk the turn into the platform's limit, where `fetch` fails in whatever
+/// way the runtime chooses rather than in ours.
+pub(crate) const TURN_BUDGET: u32 = 40;
+
 /// A logged-in reader for one firing: the session it started with (from the
 /// venue's image), a fresh login when there is none or it is refused ONCE,
-/// and whether the session changed so the caller can write it back.
+/// whether the session changed so the caller can write it back, and how
+/// many requests it has sent against `TURN_BUDGET`.
 pub(crate) struct Client {
     user: String,
     password: String,
     pub(crate) session: Session,
     pub(crate) changed: bool,
     relogged: bool,
+    pub(crate) sent: u32,
 }
 
 impl Client {
     pub(crate) fn new(user: &str, password: &str, session: Option<Session>) -> Client {
-        Client { user: user.into(), password: password.into(), session: session.unwrap_or_default(), changed: false, relogged: false }
+        Client { user: user.into(), password: password.into(), session: session.unwrap_or_default(), changed: false, relogged: false, sent: 0 }
+    }
+
+    /// One request's worth of the firing's budget, or the refusal -- BEFORE
+    /// anything is sent, so the count is exact and the refusal costs nothing.
+    fn spend(&mut self) -> std::result::Result<(), Fail> {
+        if self.sent >= TURN_BUDGET {
+            return Err(Fail::Budget(self.sent));
+        }
+        self.sent += 1;
+        Ok(())
     }
 
     /// `GET /` for the CSRF cookie, then the one `POST` (§1.2).
     async fn login(&mut self) -> std::result::Result<(), Fail> {
         let mut s = Session::default();
         let root = Wire::get(&Path::Root, &s).ok_or_else(|| Fail::NotAllowed("/".into()))?;
+        self.spend()?;
         let a = send(&root).await?;
         if !(200..=299).contains(&a.status) {
             return Err(Fail::Refused(a.status, "the front page did not answer".into()));
@@ -106,6 +130,7 @@ impl Client {
         s.absorb(&a.set_cookies);
         let w = Wire::login(&self.user, &self.password, &s)
             .ok_or_else(|| Fail::Auth("the front page set no XSRF-TOKEN cookie".into()))?;
+        self.spend()?;
         self.session = judge::logged_in(&send(&w).await?, s)?;
         self.changed = true;
         Ok(())
@@ -120,6 +145,7 @@ impl Client {
         }
         loop {
             let w = Wire::get(p, &self.session).ok_or_else(|| Fail::NotAllowed(format!("{p:?}")))?;
+            self.spend()?;
             let a = send(&w).await?;
             if self.session.absorb(&a.set_cookies) {
                 self.changed = true;
@@ -149,6 +175,7 @@ impl Client {
         }
         loop {
             let w = Wire::create_sale(body, &self.session).ok_or_else(|| Fail::Auth("no session to send a sale with".into()))?;
+            self.spend()?;
             let a = send(&w).await?;
             if self.session.absorb(&a.set_cookies) {
                 self.changed = true;
@@ -162,6 +189,9 @@ impl Client {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;
 
 impl crate::fiscal::ebills_fire::Transport for Client {
     async fn read(&mut self, p: &Path) -> std::result::Result<String, Fail> {
