@@ -79,14 +79,12 @@ pub(crate) async fn owner_at(
         }
     };
     // ONLY ITS EXISTENCE IS THE ANSWER: this asks whether the membership is
-    // there, not what it says.
-    let m: std::result::Result<Option<()>, _> = crate::identity_store::identity(&ctx.env)
+    // there, not what it says. THE RECORD COMES FROM THE PLATFORM OBJECT
+    // (W-OWNER-CPU2, `auth/verdict.rs`): read live there, a few bytes here --
+    // not the whole identity image loaded in this Worker to find one row.
+    let m: std::result::Result<Option<()>, _> = auth::verdict::member(&ctx.env, location_id, &user_id)
         .await
-        .map(|t| {
-            crate::identity_store::membership(&t, location_id, &user_id)
-                .filter(|x| crate::identity_store::s_of(x, "role") == "owner")
-                .map(|_| ())
-        });
+        .map(|m| m.filter(|x| crate::identity_store::s_of(x, "role") == "owner").map(|_| ()));
     match m {
         Ok(Some(_)) => Ok(user_id),
         // Cross-tenant is 404, never 403: a 403 confirms the location exists.
@@ -158,27 +156,25 @@ pub(crate) async fn owner_and_venue(
     // memberships` existed to prove the venue exists AND that this person owns
     // it; the membership record only exists for a venue that does, so the
     // membership IS both halves of that question.
-    let row: std::result::Result<Option<Row>, _> = crate::identity_store::identity(&ctx.env)
-        .await
-        .map(|t| match &wanted {
-            Some(l) => crate::identity_store::membership(&t, l, &user_id)
-                .filter(|x| crate::identity_store::s_of(x, "role") == "owner")
-                .map(|_| Row { location_id: l.clone() }),
-            // No venue named anywhere: the token carries none and the request
-            // asked for none. Sorted rather than `LIMIT 1` over a join whose
-            // order nobody specified -- an unordered LIMIT 1 is a coin toss the
-            // query planner gets to make differently on any two days.
-            None => {
-                let mut owned: Vec<String> =
-                    crate::identity_store::memberships_of(&t, &user_id)
-                        .into_iter()
-                        .filter(|(_, role)| role == "owner")
-                        .map(|(loc, _)| loc)
-                        .collect();
-                owned.sort();
-                owned.into_iter().next().map(|location_id| Row { location_id })
-            }
-        });
+    //
+    // AND THE IMAGE IS GONE TOO (W-OWNER-CPU2): the platform object answers the one
+    // membership record (`auth/verdict.rs`), read live in its own memory. MEASURED on
+    // 4e42be75: this read, `Table::load` of the whole identity image in the stateless
+    // Worker, was the 6-15 ms every already-relayed owner route still cost of its 10 ms.
+    let row: std::result::Result<Option<Row>, _> = match &wanted {
+        Some(l) => auth::verdict::member(&ctx.env, l, &user_id).await.map(|m| {
+            m.filter(|x| crate::identity_store::s_of(x, "role") == "owner").map(|_| Row { location_id: l.clone() })
+        }),
+        // No venue named anywhere: the token carries none and the request
+        // asked for none. Sorted rather than `LIMIT 1` over a join whose
+        // order nobody specified -- an unordered LIMIT 1 is a coin toss the
+        // query planner gets to make differently on any two days.
+        None => auth::verdict::owned(&ctx.env, &user_id).await.map(|owned| {
+            let mut owned: Vec<String> = owned.into_iter().filter(|(_, role)| role == "owner").map(|(loc, _)| loc).collect();
+            owned.sort();
+            owned.into_iter().next().map(|location_id| Row { location_id })
+        }),
+    };
     match row {
         // Cross-tenant is 404, never 403: a 403 confirms the location exists.
         Ok(Some(r)) => Ok((user_id, r.location_id)),

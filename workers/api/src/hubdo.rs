@@ -87,7 +87,7 @@ mod push_turn; mod chat; mod sms_turn; mod lost; // sms_turn: the customer's ord
 pub(crate) mod host;
 /// W-SPLIT (R-GRAPH F10): this file is the object; the table is `hubdo/route.rs`, the images `store.rs`,
 /// the sockets `{socket,platform}.rs`, the reads `answers.rs`, the commands `{place,orders,verbs}.rs`.
-mod route; mod store; mod socket; mod platform; mod answers; mod verbs; mod orders; mod place; pub(crate) mod command; // command: ONE command, ONE object turn (BN4), `hubdo/command.rs`
+mod route; mod store; mod socket; mod platform; mod answers; mod verbs; mod orders; mod place; pub(crate) mod command; mod verdict; // verdict: who someone is, answered by the platform object in a few bytes (W-OWNER-CPU2), `hubdo/verdict.rs` // command: ONE command, ONE object turn (BN4), `hubdo/command.rs`
 pub use socket::{tag_courier, tag_order, TAG_CONSOLE, TAG_COURIER};
 use crate::wire::Call;
 

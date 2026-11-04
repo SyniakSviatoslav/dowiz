@@ -35,6 +35,8 @@ type HmacSha256 = Hmac<Sha256>;
 
 /// The sign-in memo: a courier's or a cook's verdict reused inside a bounded window (W-AUTHC).
 pub mod memo;
+/// The records a decision reads, asked of the platform object (W-OWNER-CPU2).
+pub mod verdict;
 
 /// Access-token lifetimes, mirroring the old service's table.
 pub const OWNER_TTL_MS: i64 = 24 * 60 * 60 * 1000;
@@ -595,11 +597,13 @@ pub async fn authenticate_token(
             //
             // A claim that names NO venue is a platform-admin token and is
             // handled below as it always was; it owns no restaurant by design.
-            let t = crate::identity_store::identity(env)
-                .await
-                .map_err(|e| AuthError::Db(e.to_string()))?;
+            // THE RECORD, NOT THE IMAGE (W-OWNER-CPU2, `auth/verdict.rs`): the platform
+            // object reads its live identity image and answers the one membership; this
+            // Worker no longer loads the whole image to find it.
             let still = match active_location_id.as_deref() {
-                Some(venue) => crate::identity_store::membership(&t, venue, &user_id)
+                Some(venue) => verdict::member(env, venue, &user_id)
+                    .await
+                    .map_err(|e| AuthError::Db(e.to_string()))?
                     .filter(|m| crate::identity_store::s_of(m, "role") == "owner")
                     .is_some(),
                 // A claim that names NO venue is a platform-admin token and is
@@ -607,7 +611,9 @@ pub async fn authenticate_token(
                 // design. "Owner of anything" is only asked when no venue was
                 // claimed -- asking it when one WAS claimed is the defect that
                 // kept a removed owner in venue A for the life of their token.
-                None => crate::identity_store::memberships_of(&t, &user_id)
+                None => verdict::owned(env, &user_id)
+                    .await
+                    .map_err(|e| AuthError::Db(e.to_string()))?
                     .iter()
                     .any(|(_, role)| role == "owner"),
             };
@@ -632,32 +638,20 @@ pub async fn authenticate_token(
                 expires_at_ms: i64,
                 has_location: i64,
             }
-            // FOUR CONDITIONS, TWO READS. The session says whether it is live;
+            // FOUR CONDITIONS, TWO RECORDS. The session says whether it is live;
             // the roster says whether this courier is on THIS venue's. They are
             // in two images because they are two facts with different lifetimes
-            // -- a session turns over, a roster does not -- and the join that
-            // used to decide both at once is now two lookups by key.
-            let (sess, crew) = futures_util::future::join(
-                crate::identity_store::sessions(env),
-                crate::identity_store::couriers(env),
-            )
-            .await;
-            let sess = sess.map_err(|e| AuthError::Db(e.to_string()))?;
-            let crew = crew.map_err(|e| AuthError::Db(e.to_string()))?;
-            let row = crate::identity_store::rec(&sess, crate::identity_store::K_CSESSION, &jti)
-                .filter(|r| crate::identity_store::s_of(r, "courier_id") == sub)
-                .map(|r| Row {
-                    revoked_at_ms: r
-                        .get("revoked_at_ms")
-                        .and_then(serde_json::Value::as_i64),
-                    expires_at_ms: crate::identity_store::i_of(&r, "expires_at_ms"),
-                    has_location: crew
-                        .get(
-                            crate::identity_store::K_ROSTER,
-                            &crate::identity_store::roster_id(&active_location_id, &sub),
-                        )
-                        .is_some() as i64,
-                });
+            // -- a session turns over, a roster does not. The platform object
+            // reads both in its own memory and answers the row and the mark
+            // (W-OWNER-CPU2, `auth/verdict.rs`); this Worker loaded both images.
+            let (session, rostered) = verdict::courier(env, &active_location_id, &sub, &jti)
+                .await
+                .map_err(|e| AuthError::Db(e.to_string()))?;
+            let row = session.map(|r| Row {
+                revoked_at_ms: r.get("revoked_at_ms").and_then(serde_json::Value::as_i64),
+                expires_at_ms: crate::identity_store::i_of(&r, "expires_at_ms"),
+                has_location: rostered as i64,
+            });
             let row = row.ok_or(AuthError::Revoked("no such courier session"))?;
             if row.revoked_at_ms.is_some() {
                 return Err(AuthError::Revoked("courier session revoked"));
@@ -689,17 +683,14 @@ pub async fn authenticate_token(
             // one device's session before its token expires, which a
             // membership (every device at once) cannot say. Two images, read
             // together, because they are two facts with different lifetimes.
-            let (ident, sess) = futures_util::future::join(
-                crate::identity_store::identity(env),
-                crate::identity_store::sessions(env),
-            )
-            .await;
-            let t = ident.map_err(|e| AuthError::Db(e.to_string()))?;
-            let sess = sess.map_err(|e| AuthError::Db(e.to_string()))?;
-            let m = crate::identity_store::membership(&t, &active_location_id, &sub)
-                .ok_or(AuthError::Revoked("staff membership is gone or suspended"))?;
+            //
+            // Both records come from the platform object in one ask (W-OWNER-CPU2,
+            // `auth/verdict.rs`); this Worker loaded both images to read them.
+            let (member, row) = verdict::staff(env, &active_location_id, &sub, &jti)
+                .await
+                .map_err(|e| AuthError::Db(e.to_string()))?;
+            let m = member.ok_or(AuthError::Revoked("staff membership is gone or suspended"))?;
             use crate::services::identity::staff_rules as sr;
-            let row = crate::identity_store::rec(&sess, sr::K_SSESSION, &jti);
             sr::session_verdict(row.as_ref(), &sub, &active_location_id, now_ms)
                 .map_err(AuthError::Revoked)?;
             let caps = staff_caps(&caps, &crate::identity_store::s_of(&m, "role"))?;
@@ -723,71 +714,17 @@ async fn api_key_principal(
     now_ms: i64,
 ) -> std::result::Result<Principal, AuthError> {
     let Some((id, secret)) = rest.split_once('.') else {
-        return Err(AuthError::Revoked("that key is malformed"));
+        return Err(AuthError::Revoked(verdict::KEY_MALFORMED));
     };
-    #[derive(Deserialize)]
-    struct Row {
-        owner_id: String,
-        location_id: String,
-        key_hash: String,
-        expires_at_ms: i64,
-        revoked_at_ms: Option<i64>,
+    // JUDGED AND STAMPED IN THE PLATFORM OBJECT (W-OWNER-CPU2, `hubdo/verdict.rs`): the
+    // sessions image was loaded here to find the row, then loaded AGAIN and written back whole
+    // to record `last_used_ms` -- two image reads and a write per API-key request in the 10 ms
+    // Worker. The judgement is `verdict::judge_api_key`, unchanged in its four refusals; the
+    // stamp is still recorded, not enforced, and still not allowed to fail the call.
+    match verdict::api_key(env, id, secret, now_ms).await.map_err(|e| AuthError::Db(e.to_string()))? {
+        Ok((owner_id, location_id)) => Ok(Principal::Owner { user_id: owner_id, active_location_id: Some(location_id) }),
+        Err(why) => Err(AuthError::Revoked(why)),
     }
-    let sess = crate::identity_store::sessions(env)
-        .await
-        .map_err(|e| AuthError::Db(e.to_string()))?;
-    let row = crate::identity_store::rec(&sess, crate::identity_store::K_APIKEY, id).map(|r| Row {
-        owner_id: crate::identity_store::s_of(&r, "owner_id"),
-        location_id: crate::identity_store::s_of(&r, "location_id"),
-        key_hash: crate::identity_store::s_of(&r, "key_hash"),
-        expires_at_ms: crate::identity_store::i_of(&r, "expires_at_ms"),
-        revoked_at_ms: r.get("revoked_at_ms").and_then(serde_json::Value::as_i64),
-    });
-    let Some(row) = row else {
-        return Err(AuthError::Revoked("no such key"));
-    };
-    if row.revoked_at_ms.is_some() {
-        return Err(AuthError::Revoked("that key was revoked"));
-    }
-    if now_ms >= row.expires_at_ms {
-        return Err(AuthError::Revoked("that key has expired"));
-    }
-    if !verify_opaque(secret, &row.key_hash) {
-        return Err(AuthError::Revoked("no such key"));
-    }
-    // Recorded, not enforced: an owner looking at a key they no longer recognise
-    // needs to know whether anything is still using it before they revoke it.
-    //
-    // AND NOT ALLOWED TO FAIL THE CALL. It was `let _ = ...` before and it
-    // stays that way: a key that works must not stop working because a
-    // bookkeeping write lost a generation guard.
-    let key_id = id.to_string();
-    let _ = crate::identity_store::with_sessions(env, move |t| {
-        if let Some(mut r) =
-            crate::identity_store::rec(t, crate::identity_store::K_APIKEY, &key_id)
-        {
-            r["last_used_ms"] = serde_json::json!(now_ms);
-            let loc = crate::identity_store::s_of(&r, "location_id");
-            let index = vec![(
-                crate::identity_store::apikey_at(&loc, &key_id),
-                key_id.clone(),
-            )];
-            t.put(
-                crate::identity_store::K_APIKEY,
-                &key_id,
-                &r.to_string(),
-                &index,
-                &[],
-            )
-            .map_err(|e| Error::RustError(format!("api key: {e}")))?;
-        }
-        Ok(())
-    })
-    .await;
-    Ok(Principal::Owner {
-        user_id: row.owner_id,
-        active_location_id: Some(row.location_id),
-    })
 }
 
 // `require_location` WAS HERE AND IT ENCODED THE HOLE. For an owner whose

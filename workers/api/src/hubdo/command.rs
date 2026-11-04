@@ -114,11 +114,21 @@ pub enum Kind {
     StaffPassword,  // POST /api/staff/password
     StaffRefresh,   // POST /api/staff/refresh
     StaffReset,     // POST /api/owner/staff/:id/password
+    // ── the routes that still pulled every order into the Worker (W-OWNER-CPU2, `command/relayed.rs`:
+    // which handler each is, its route and its path parameters) ──
+    Refund, Returned, GuestConfirm, Sitting, StaffRoom, StaffFloor, TillTips, KitchenAssist, CourierAssist, // the room and the till
+    Customers, CustomerReveal, CustomerForget, Reveals, CustomerRecord, CustomerRekey, Reforget, CourierDetail, // the owner's people
+    CampaignList, CampaignDefine, CampaignReport, CampaignPreview, CampaignSend, Inbox, WalletLegs, WalletLegsRepair,
+    Posts, DraftPost, Graph, OwnerAssist, AnalyticsKitchen, Exceptions, Health, OptionBomRead, OptionBomWrite, BagCard, BagSet, BagQr, // the owner's numbers and words
+    PromoCheck, Voice, Welcome, ThreadMessages, ThreadSend, // the public ones (Welcome and the threads are slug routes)
 }
 
 impl Kind {
     /// The path parameters this command's handler reads, by name.
     pub(crate) fn params(self) -> &'static [&'static str] {
+        if let Some(p) = relayed::params(self) {
+            return p;
+        }
         match self {
             Kind::Place | Kind::Quote => &["slug"],
             Kind::ConsoleOrders | Kind::KitchenBoard | Kind::CourierTasks | Kind::CourierPosition => &[],
@@ -135,6 +145,7 @@ impl Kind {
             | Kind::Feedback => &["id"],
             Kind::OwnerLogin | Kind::OwnerRefresh | Kind::OwnerLogout | Kind::CourierLogin | Kind::CourierClaim | Kind::CourierRefresh => &[],
             Kind::StaffLogin | Kind::StaffClaim | Kind::StaffPassword | Kind::StaffRefresh => &[],
+            _ => &[], // every W-OWNER-CPU2 kind was answered above (`relayed::params`; `relayed/tests.rs` holds that none reaches here)
         }
     }
 }
@@ -248,6 +259,11 @@ impl HubImages {
             Ok(door) => return door.await,
             Err(back) => back,
         };
+        // THE ROUTES THAT PULLED EVERY ORDER INTO THE WORKER (W-OWNER-CPU2), likewise.
+        let (call, ctx) = match relayed::in_object(cmd.kind, call, ctx) {
+            Ok(turn) => return turn.await,
+            Err(back) => back,
+        };
         match cmd.kind {
             Kind::Place => {
                 let place = crate::hubstore::Place::of_authorised(&ctx, &cmd.venue)?;
@@ -275,6 +291,9 @@ impl HubImages {
         }
     }
 }
+
+/// The routes W-OWNER-CPU2 moved into the object, and the route line's handler (`routed`).
+pub(crate) mod relayed;
 
 #[cfg(test)]
 mod tests;

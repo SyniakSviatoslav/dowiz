@@ -26,9 +26,10 @@ fn at(path: &str) -> String {
 /// A request for one of them is the platform's bill, not the venue's.
 const PLATFORM_IMAGES: [&str; 7] = ["registry", "identity", "sessions", "couriers", "waitlist", "erasures", "errors"];
 
-/// Is this object request one to the venue's own object?
+/// Is this object request one to the venue's own object? A platform image, or the sign-in
+/// verdict only the platform object answers (`/fold/verdict`, W-OWNER-CPU2), is the platform's.
 pub(crate) fn is_venue(path: &str) -> bool {
-    !path.strip_prefix("/img/").is_some_and(|img| PLATFORM_IMAGES.contains(&img))
+    !path.starts_with("/fold/verdict") && !path.strip_prefix("/img/").is_some_and(|img| PLATFORM_IMAGES.contains(&img))
 }
 
 /// The object requests `f` made, by path, and what it answered.

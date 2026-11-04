@@ -141,8 +141,9 @@ mod live {
         }
     }
 
-    /// THE CUT: a courier's step reads the platform's two sign-in images once, and the steps
-    /// after it inside the window read nothing from the platform at all.
+    /// THE CUT: a courier's step asks the platform object once (W-OWNER-CPU2: the verdict, a
+    /// few bytes, where it read the two sign-in images whole), and the steps after it inside
+    /// the window read nothing from the platform at all.
     #[test]
     fn a_courier_reads_the_platform_once_per_window() {
         let site = Site::new();
@@ -150,14 +151,14 @@ mod live {
         let (rider, _) = site.courier("alpha", &owner, "+355691111111");
         let (first, p) = platform_reads(|| auth(&site, &rider, T0));
         assert!(matches!(p, Ok(Principal::Courier { .. })));
-        assert_eq!(first, vec!["/img/sessions", "/img/couriers"], "the first step reads the live rows");
+        assert_eq!(first, vec!["/fold/verdict"], "the first step reads the live rows");
         for dt in [1, 12_000, TTL_MS - 1] {
             let (again, p) = platform_reads(|| auth(&site, &rider, T0 + dt));
             assert!(matches!(p, Ok(Principal::Courier { .. })));
             assert!(again.is_empty(), "a step {dt} ms later read the platform: {again:?}");
         }
         let (after, _) = platform_reads(|| auth(&site, &rider, T0 + TTL_MS));
-        assert_eq!(after.len(), 2, "past the window the live rows are read again");
+        assert_eq!(after, vec!["/fold/verdict"], "past the window the live rows are read again");
     }
 
     /// The same for a cook.
@@ -168,14 +169,15 @@ mod live {
         let cook = site.staff("alpha", &owner, "k@x.test", "kitchen");
         let (first, p) = platform_reads(|| auth(&site, &cook, T0));
         assert!(matches!(p, Ok(Principal::Staff { .. })), "{:?}", p.err());
-        assert_eq!(first, vec!["/img/identity", "/img/sessions"]);
+        assert_eq!(first, vec!["/fold/verdict"]);
         let (again, p) = platform_reads(|| auth(&site, &cook, T0 + 30_000));
         assert!(matches!(p, Ok(Principal::Staff { .. })));
         assert!(again.is_empty(), "{again:?}");
     }
 
-    /// OWNERS ARE NOT REMEMBERED: every owner step reads `identity`, and an owner removed by
-    /// another isolate is refused on the very next request (W-CHEAP's rule, kept exact).
+    /// OWNERS ARE NOT REMEMBERED: every owner step asks the platform object for the live
+    /// membership (`/fold/verdict`; before W-OWNER-CPU2 it read `identity` whole), and an owner
+    /// removed by another isolate is refused on the very next request (W-CHEAP's rule, kept exact).
     #[test]
     fn an_owner_removed_elsewhere_is_refused_on_the_next_request() {
         let site = Site::new();
@@ -183,7 +185,7 @@ mod live {
         for dt in [0, 1] {
             let (reads, p) = platform_reads(|| auth(&site, &owner, T0 + dt));
             assert!(matches!(p, Ok(Principal::Owner { .. })));
-            assert_eq!(reads, vec!["/img/identity"], "an owner's every step re-derives the membership");
+            assert_eq!(reads, vec!["/fold/verdict"], "an owner's every step re-derives the membership");
         }
         let Ok(Claims::Owner { user_id, .. }) = verify(&site.env(), &owner, T0) else { panic!("owner token") };
         elsewhere(&site, crate::platform_store::IDENTITY, |t| {

@@ -88,6 +88,8 @@ impl HubImages {
                 (Method::Post, "place") => self.place_route(req).await,
                 // A WHOLE REQUEST RUN IN THIS TURN (BN4, `hubdo/command.rs`): one object request per placement.
                 (Method::Post, "command") => self.command_route(req).await,
+                // THE RECORDS ONE SIGN-IN DECISION READS, from the PLATFORM object (W-OWNER-CPU2, `hubdo/verdict.rs`).
+                (Method::Post, "verdict") => self.verdict_route(req).await,
                 // THE REBUILD, read-only, for the conservation audit's law 8 (`hubdo/answers.rs`).
                 (Method::Get, "rebuild") => Response::from_json(&self.rebuild().await?),
                 (Method::Post, "advance") => self.advance_route(req).await,

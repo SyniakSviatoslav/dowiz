@@ -115,6 +115,7 @@ pub(crate) const EDGES: &[Edge] = &[
     read("graph", &["log", "catalog", "stock"]),
     read("kitchen_facts", &["log", "catalog", "stock"]),
     read("waste", &["stock", "log"]),
+    read("verdict", &["identity", "sessions", "couriers"]), // the records a sign-in decision reads, answered by the PLATFORM object (W-OWNER-CPU2); the API key stamp writes `sessions`
     e("generation", LOG, "generation", Step::PerRead, OutKey::Generation),
     // ── memory, the check, the platform ──
     e("positions", NONE, "positions", Step::Memory, OutKey::None),

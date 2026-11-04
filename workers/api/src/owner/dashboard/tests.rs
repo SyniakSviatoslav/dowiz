@@ -132,7 +132,8 @@ fn the_object_folds_the_tiles_the_worker_used_to_and_the_worker_relays_them() {
     let r = site.run(crate::owner::dashboard, get(&url).bearer(&t).on("alpha"), &[]);
     assert_eq!(r.status_code(), 200, "{}", r.body_str());
     assert_eq!(r.body(), folded.body(), "relayed byte for byte");
-    let folds: Vec<String> = object_paths()[from..].iter().filter(|p| p.starts_with("/fold/")).cloned().collect();
+    // (`/fold/verdict` is the platform object's, the owner's membership in a few bytes: W-OWNER-CPU2.)
+    let folds: Vec<String> = object_paths()[from..].iter().filter(|p| p.starts_with("/fold/") && !p.starts_with("/fold/verdict")).cloned().collect();
     assert_eq!(folds, ["/fold/dashboard"], "the orders never cross the hop");
     // THE FOLD NEEDS A VENUE AND A CLOCK, as every read does.
     assert_eq!(site.fold("alpha", "/fold/dashboard?venue=alpha").status_code(), 400);
