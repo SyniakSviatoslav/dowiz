@@ -56,7 +56,14 @@ pub struct Answer {
 /// (the caller's 503, `AuthError::Db`), never a refusal.
 pub async fn ask(env: &Env, ask: &Ask) -> Result<Answer> {
     let stub = crate::platform_store::stub(env)?;
-    let call = Call::new("https://hub/fold/verdict", Method::Post)?.with_json(ask);
+    // `Call::with_json`/`with_body` are #[cfg(test)]; the release build passes a body through
+    // `new_with_init`, as `command::call` does (a test-only builder here broke the wasm build).
+    let body = serde_json::to_vec(ask).map_err(|e| Error::RustError(format!("verdict: unencodable ask: {e}")))?;
+    let mut call = Call::new_with_init(
+        "https://hub/fold/verdict",
+        crate::wire::RequestInit::new().with_method(Method::Post).with_body(Some(body)),
+    )?;
+    call.headers_mut()?.set("content-type", "application/json")?;
     let mut res = stub.fetch_with_request(call).await?;
     let status = res.status_code();
     let text = res.text().await?;
