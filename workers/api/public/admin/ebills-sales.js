@@ -39,7 +39,7 @@ function paint(){
   const d = view.d || {};
   const modes = [{ value: 'list', key: 'es_list' }, { value: 'numbers', key: 'es_numbers' }];
   $('#esBody').innerHTML = `
-    <div class="stats">${stat('es_orders30', esc(d.count ?? 0))}${stat('es_revenue30', esc(money(d.revenue || 0)))}
+    <div class="stats">${stat('es_orders30', esc(d.counted ?? d.count ?? 0))}${stat('es_revenue30', esc(money(d.revenue || 0)))}
       ${stat('es_avgCheck', esc(money(d.average_check || 0)))}${stat('es_unmatchedShare', esc(L.pct(d.unmatched?.share_ppm ?? 0)), d.unmatched?.lines ? 'warn' : '')}</div>
     ${chips({ values: modes, value: view.mode, attr: 'mode' })}
     <div id="esPane" class="mt-3">${view.mode === 'list' ? list(d) : numbers(d)}</div>`;
