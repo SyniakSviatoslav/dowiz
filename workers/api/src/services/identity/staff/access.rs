@@ -195,6 +195,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("get", "/api/owner/ebills", Owner, No),
     ("post", "/api/owner/ebills/config", Owner, No),
     ("post", "/api/owner/ebills/map", Owner, No),
+    ("get", "/api/owner/ebills/sales", Owner, No),
     ("get", "/api/owner/fiscal", Owner, No), ("get", "/api/owner/offline_sales", Owner, No), // W-OFFSALE
     ("post", "/api/owner/fiscal/ebills", Owner, No),
     ("get", "/api/owner/orders/:id/receipt", Owner, No),

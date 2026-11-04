@@ -95,12 +95,16 @@ const PLATFORM = { wolt: 'Wolt', glovo: 'Glovo', baboon: 'Baboon', ebills: 'eBil
 const platformOf = o => { const n = o.external?.order_id ?? o.external?.inv_ord_num; return PLATFORM[o.channel] ? `${PLATFORM[o.channel]}${n != null && n !== '' ? ' ' + n : ''}` : ''; };
 
 const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
-/// HISTORY = every order that is not live, in the list's own order. The live
+/// HISTORY = every order that is not live, NEWEST FIRST BY WHEN IT WAS PLACED
+/// (`created_at_ms`), not by log position: a till's month of history imported
+/// today is appended after today's orders and pushed them past the first page
+/// (flows F9, 2026-11-04: this run's orders at rows 203-204 of 606). Stable for
+/// equal times. The live
 /// set is built ONCE per call: it was `liveOrders()` rebuilt inside the filter
 /// callback and then a linear `includes`, O(n^2) with n arrays per render and
 /// per keystroke (R-LOOPS row 7: 3.8 ms -> 36 us at 300 orders). Identity, not
 /// id: the live list holds the very objects of `S.orders`.
-export function historyOf(orders, live){ const on = new Set(live); return orders.filter(o => !on.has(o)); }
+export function historyOf(orders, live){ const on = new Set(live); return orders.filter(o => !on.has(o)).map((o, i) => [o, i]).sort((x, y) => ((y[0].created_at_ms || 0) - (x[0].created_at_ms || 0)) || (x[1] - y[1])).map(p => p[0]); }
 /// THE SEARCHABLE TEXT OF AN ORDER, normalised once and kept while the order
 /// is the same object and its status word reads the same. An order that moves
 /// is a NEW object (`/lib/replica.js` copies on write; a full read replaces

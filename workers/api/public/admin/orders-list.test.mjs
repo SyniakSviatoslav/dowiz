@@ -52,14 +52,15 @@ const st = s => globalThis.__ol.words[s] || s;
 const LIVE = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY'];
 const liveOrders = () => globalThis.__ol.S.orders.filter(o => LIVE.includes(o.status));
 const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '');
+const byNewest = list => list.map((o, i) => [o, i]).sort((x, y) => ((y[0].created_at_ms || 0) - (x[0].created_at_ms || 0)) || (x[1] - y[1])).map(p => p[0]);
 function oracleMatching(view){
   const S = globalThis.__ol.S;
-  const all = view.mode === 'history' ? S.orders.filter(o => !liveOrders().includes(o)) : liveOrders();
+  const all = view.mode === 'history' ? byNewest(S.orders.filter(o => !liveOrders().includes(o))) : liveOrders();
   const q = norm(view.q).trim(); if (!q) return all;
   const terms = q.split(/\s+/).filter(Boolean);
   return all.filter(o => { const hay = norm([o.id.slice(0, ORDER_ID_SHOWN), o.contact?.name, o.contact?.phone, o.fulfilment?.address?.line, o.status, st(o.status), o.promo?.code, ...(o.items || []).map(i => i.name)].join(' ')); return terms.every(tm => hay.includes(tm)); });
 }
-const oracleHistoryAll = () => globalThis.__ol.S.orders.filter(o => !liveOrders().includes(o));
+const oracleHistoryAll = () => byNewest(globalThis.__ol.S.orders.filter(o => !liveOrders().includes(o)));
 
 /// A deterministic venue: statuses, diacritics, missing fields, promos.
 const STATUSES = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELIVERED', 'CANCELLED', 'REJECTED', 'DELIVERED', 'DELIVERED'];
@@ -152,4 +153,14 @@ test('an imported till sale is in history and is found by its till receipt numbe
   assert.ok(!O.listFor('live', '').includes(till));
   assert.deepEqual(O.listFor('history', '8598').map(o => o.id), [till.id], 'the till receipt number finds it');
   assert.deepEqual(O.listFor('history', 'korca').map(o => o.id), [till.id]);
+});
+
+test('history is newest first by placement time, not by log position (flows F9, 2026-11-04)', () => {
+  // A till's month imported today is appended AFTER today's orders.
+  const today = { id: 'today-delivered', status: 'DELIVERED', created_at_ms: 2_000, items: [] };
+  const old = Array.from({ length: 80 }, (_, i) => ({ id: `ebills:${i}`, status: 'PICKED_UP', created_at_ms: 1_000 - i, items: [] }));
+  globalThis.__ol.S.orders = [...old, today];
+  const h = O.historyOf(globalThis.__ol.S.orders, liveOrders());
+  assert.equal(h[0].id, 'today-delivered');
+  assert.deepEqual(h.slice(1, 3).map(o => o.id), ['ebills:0', 'ebills:1']);
 });

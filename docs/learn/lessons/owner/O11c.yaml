@@ -1,0 +1,37 @@
+# Lesson O11c (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# `pending: yes` = the anchor is named by the blueprint but not yet in the markup (tools/gates/learn.sh).
+id: O11c
+role: owner
+module: ebillsSales
+order: 18
+covers: [ebillsSales]
+title:
+  sq: "Shitjet e arkës"
+  en: "Till sales"
+  uk: "Продажі каси"
+  ru: "Продажи кассы"
+goal:
+  sq: "Shihni çdo shitje të arkës së 30 ditëve të fundit dhe shifrat e tyre."
+  en: "See every till sale of the last 30 days and their numbers."
+  uk: "Побачити кожен продаж каси за останні 30 днів і їхні цифри."
+  ru: "Увидеть каждую продажу кассы за последние 30 дней и их цифры."
+steps:
+  - key: 1
+    anchor: more.tile.ebillsSales
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.ebillsSales"]'
+    title:
+      sq: "Shitjet e arkës"
+      en: "Till sales"
+      uk: "Продажі каси"
+      ru: "Продажи кассы"
+    caption:
+      sq: "Shitjet e arkës, 30 ditë: lista, detajet dhe shifrat."
+      en: "The till's sales of 30 days: the list, each sale, and the numbers."
+      uk: "Продажі каси за 30 днів: список, кожен чек і цифри."
+      ru: "Продажи кассы за 30 дней: список, каждый чек и цифры."

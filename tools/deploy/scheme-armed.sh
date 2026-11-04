@@ -52,6 +52,7 @@ quarantine.rs	the construction is in its test module
 wallet.rs	the construction is in its test module
 services/orders/chat/store.rs	the construction is in its test module; the rebuild is LogImage::fresh_sized
 ebills/live.rs	an import dry-run that saves no image
+ebills/live_tab.rs	a #[cfg(test)] #[ignore] harness: an in-memory hub that is never saved
 command/amend/agrees.rs	golden tests over fixtures'
 bad=0; armed=0; named=0
 while IFS= read -r f; do
