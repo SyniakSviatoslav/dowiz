@@ -12,7 +12,7 @@
 
 // Web Push (W-PUSH): the 'push' and 'notificationclick' handlers.
 importScripts('/lib/push-sw.js');
-const SHELL_CACHE = 'dowiz-shell-2026-10-05-sense-voice-lost';
+const SHELL_CACHE = 'dowiz-shell-2026-11-03-service-mode';
 /// THE WHOLE MODULE GRAPH, not just its entry.
 ///
 /// This list used to hold the document, `/app.js` and the three stylesheets,
@@ -48,6 +48,7 @@ const SHELL_CACHE_MODULES = [
   '/lib/retry.js',
   '/store/avoid.js',
   '/store/cart.js',
+  '/store/how.js',
   // The privacy-notice link (P8): menu.js and booking.js import it statically.
   '/store/consent.js',
   '/store/dish.js',

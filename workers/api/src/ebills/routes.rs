@@ -4,6 +4,7 @@
 //! object executes (`hubdo/ebills.rs`).
 //!
 //!   GET  /api/owner/ebills         the link, the poller, the crosswalk, the floor
+//!   GET  /api/owner/ebills/sales   the till tab: 30 days of till orders + their numbers
 //!   POST /api/owner/ebills/config  {enabled, pos_id, user, password?}
 //!   POST /api/owner/ebills/map     {code, product_id?}  -- empty clears
 //!
@@ -11,7 +12,7 @@
 //! SUGGESTIONS (a normalised name match, and whether the price agrees); none
 //! of them is applied by anything.
 
-use super::cmd::{ConfigIn, MapIn};
+use super::cmd::{ConfigIn, MapIn, SalesIn};
 use crate::owner::owner_and_venue;
 use crate::hubstore::Place;
 use serde_json::Value;
@@ -40,6 +41,17 @@ pub(crate) async fn status(req: Request, ctx: RouteContext<crate::Req>) -> Resul
         Err(r) => return Ok(r),
     };
     command(&place, "ebills/status", &serde_json::json!({})).await
+}
+
+/// `GET /api/owner/ebills/sales` -- the till tab (W-EBILLS-TAB): every till
+/// order of the last `sales::DAYS` days and the numbers over them, read from
+/// the venue's own log by its object (`hubdo/ebills.rs`, `ebills/sales`).
+pub(crate) async fn sales(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    let place = match place_of(&req, &ctx).await? {
+        Ok(p) => p,
+        Err(r) => return Ok(r),
+    };
+    command(&place, "ebills/sales", &SalesIn { now_ms: ctx.data.now_ms }).await
 }
 
 /// `POST /api/owner/ebills/config`

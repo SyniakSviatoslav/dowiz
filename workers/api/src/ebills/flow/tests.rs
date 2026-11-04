@@ -30,6 +30,20 @@ struct Till {
     logins: Rc<Cell<u32>>,
     lapse: Rc<Cell<bool>>,
     mfa: bool,
+    /// A month of history: the oldest listed sale's id (a bill), with a
+    /// counter sale five ids after it (`history_tests.rs`). `None`: the till
+    /// has only the window's two sales.
+    history: Option<i64>,
+}
+
+/// A counter sale rung up a month ago: `course()` with no table and its own id.
+fn counter_at(id: i64) -> Value {
+    let mut c = course();
+    c["id"] = json!(id);
+    c["uuid"] = json!(format!("00000000-0000-4000-8000-00000000{id}"));
+    c["saleUnit"] = Value::Null;
+    c["saleUnitOrder"] = Value::Null;
+    c
 }
 
 impl Till {
@@ -70,7 +84,18 @@ impl Till {
                             {"id": 12, "identifier": "12", "type": "TABLE", "status": "OCCUPIED", "pointOfSaleId": 1, "orderTotal": 500.0},
                             {"id": 14, "identifier": "14", "type": "TABLE", "status": "ACTIVE", "pointOfSaleId": 1, "orderTotal": null}
                         ])),
+                        // THE MONTH'S OLDEST (`Path::Oldest`): the list sorted ascending, one row.
+                        "/api/sales" if url.query().is_some_and(|q| q.contains("sort=id,asc")) => {
+                            assert!(url.query().unwrap().contains("size=1&"), "one row is enough: {url}");
+                            let rows: Vec<Value> = t.history.map(|id| { let mut b = bill_listed(); b["id"] = json!(id); b }).into_iter().collect();
+                            json_reply(&json!({"sales": rows, "total": 0.0}))
+                        }
                         "/api/sales" => json_reply(&json!({"sales": [bill_listed(), course()], "total": 660.0})),
+                        p if t.history.is_some_and(|h| p == format!("/api/sales/{}", h + 5)) => {
+                            let mut r = Reply::ok(&wrapped(counter_at(t.history.unwrap() + 5)))?;
+                            r.headers_mut().set("content-type", "application/json")?;
+                            Ok(r)
+                        }
                         "/api/sales/8602" => {
                             let mut r = Reply::ok(&wrapped(course()))?;
                             r.headers_mut().set("content-type", "application/json")?;
@@ -238,3 +263,7 @@ fn at_path(path: &str) -> String {
 /// The till sale as an ordinary order on every reader (`ordinary_tests.rs`).
 #[path = "ordinary_tests.rs"]
 mod ordinary;
+
+/// A first run backfills the till's last month, once (`history_tests.rs`).
+#[path = "history_tests.rs"]
+mod history;

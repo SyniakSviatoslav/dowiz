@@ -40,6 +40,10 @@ pub(crate) enum Path {
     /// `GET /api/sales?…` -- the fiscal list (bills and counter sales), newest
     /// first. Dates are the venue's `YYYY-MM-DD`, inclusive.
     Sales { begin: String, end: String, pos: i64, size: u32 },
+    /// `GET /api/sales?…&sort=id,asc&size=1` -- the OLDEST listed sale of a
+    /// window: where a venue's first run starts (`history.rs`). One row, so
+    /// a month of bills is never paged through to find its first id.
+    Oldest { begin: String, end: String, pos: i64 },
     /// `GET /api/sales/{id}?currentPosId=` -- one sale with its lines.
     Sale { id: i64, pos: i64 },
     /// `GET /api/sale-units-tables?pointOfSaleId=` -- the live floor.
@@ -65,16 +69,8 @@ impl Path {
         let path = match self {
             Path::Root => "/".to_string(),
             Path::Account => "/api/account".to_string(),
-            Path::Sales { begin, end, pos, size } => {
-                if !is_day(begin) || !is_day(end) || *pos < 1 {
-                    return None;
-                }
-                format!(
-                    "/api/sales?page=0&size={size}&sort=id,desc&beginDate={begin}&endDate={end}\
-                     &client=-1&pointOfSale=-1&extraUser=-1&sale=-1&invOrdNum=-1\
-                     &isSelfIssue=false&isReverseCharge=false&isExport=false&currentPosId={pos}"
-                )
-            }
+            Path::Sales { begin, end, pos, size } => sales_url(begin, end, *pos, *size, "desc")?,
+            Path::Oldest { begin, end, pos } => sales_url(begin, end, *pos, 1, "asc")?,
             Path::Sale { id, pos } if *id > 0 && *pos > 0 => format!("/api/sales/{id}?currentPosId={pos}"),
             Path::Sale { .. } => return None,
             Path::Tables { pos } if *pos > 0 => format!("/api/sale-units-tables?pointOfSaleId={pos}"),
@@ -83,6 +79,20 @@ impl Path {
         };
         Some(format!("{ORIGIN}{path}"))
     }
+}
+
+/// The list's query as the SPA sends it (§1.3); `order` is `desc` for the
+/// newest first, `asc` for the oldest. `None` unless both days are days
+/// and the point of sale is one.
+fn sales_url(begin: &str, end: &str, pos: i64, size: u32, order: &str) -> Option<String> {
+    if !is_day(begin) || !is_day(end) || pos < 1 {
+        return None;
+    }
+    Some(format!(
+        "/api/sales?page=0&size={size}&sort=id,{order}&beginDate={begin}&endDate={end}\
+         &client=-1&pointOfSale=-1&extraUser=-1&sale=-1&invOrdNum=-1\
+         &isSelfIssue=false&isReverseCharge=false&isExport=false&currentPosId={pos}"
+    ))
 }
 
 /// THE SECOND LOCK: is this URL one of the allow-listed paths? Exact paths

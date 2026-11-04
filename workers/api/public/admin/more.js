@@ -22,7 +22,7 @@ const GROUPS = [
   ['inbox', [['inbox', 'message-2', openInbox]]],
   ['roomGroup', [['bookings', 'tools-kitchen-2', openBookings], ['floorPlan', 'category', openFloorPlan], ['tableQr', 'photo', openTableQr]]],
   ['marketing', [['promos', 'ticket', openPromos], ['posts', 'send', openPosts], ['campaigns', 'brand-whatsapp', openCampaigns], ['social', 'sparkles', openSocial], ['bagQr', 'shopping-bag', openBag]]],
-  ['analytics', [['analytics', 'chart-bar', openAnalytics], ['customers', 'user', openCustomers], ['staff', 'user-plus', openStaff], ['exceptions', 'alert-triangle', openExceptions]]],
+  ['analytics', [['analytics', 'chart-bar', openAnalytics], ['ebillsSales', 'receipt', openEbillsSales], ['customers', 'user', openCustomers], ['staff', 'user-plus', openStaff], ['exceptions', 'alert-triangle', openExceptions]]],
   ['learnGroup', [['learn', 'player-play', openLearn]]],
   ['settingsVenue', [['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['deliveryArea', 'map-pin', openZones], ['payments', 'coin-hole', openPayments],
                      ['branding', 'fan', openBranding], ['features', 'tools-kitchen-2', openFeatures], ['preview', 'eye', openPreview], ['pubMenu', 'cloud-upload', openPubMenu]]],
@@ -100,6 +100,8 @@ export async function learnFromHash(){ if (/learn=/.test(location.hash)) (await 
 
 // ── the till link (ebills.al) ───────────────────────────────────────────────
 async function openEbills(){ (await import('/admin/ebills.js')).open(); }
+// The till's sales of the last 30 days and their numbers (W-EBILLS-TAB): its own sheet, under Analytics.
+async function openEbillsSales(){ (await import('/admin/ebills-sales.js')).open(); }
 // The data processing agreement (P9): read and accept it for the venue.
 async function openDpa(){ (await import('/admin/dpa.js')).open(); }
 

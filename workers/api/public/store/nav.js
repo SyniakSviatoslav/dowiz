@@ -37,7 +37,9 @@ const TABS = [
   // every language. A tab gets one word.
   ['search', 'search',       'tabSearch'],
   ['cart',   'bento',        'cart'],
-  ['orders', 'scroll',       'orders'],
+  // ITS OWN KEY TOO: `orders` ("Замовлення") is the sheet's eyebrow and ten
+  // letters, which a 60px tab at 360px cut to "Замов…" in Ukrainian.
+  ['orders', 'scroll',       'tabOrders'],
   ['info',   'lantern',      'info'],
 ];
 /// Each tab's learning anchor, as a literal (docs/learn/anchors-store.txt).
@@ -77,8 +79,15 @@ export function mountNav(){
   $('#langBtn').onclick = openLanguage;
   $('#curBtn').onclick = openCurrency;
   paintCurrencyButton();
+  paintLanguageButton();
   addEventListener('dw:money', paintCurrencyButton);
   retranslate(nav);
+}
+/// The language button shows the code it is reading in, the way the currency
+/// button shows its code: the state is visible without opening anything, and
+/// the control is recognisable as the language control.
+function paintLanguageButton(){
+  const el = $('#langCode'); if (el) el.textContent = lang.toUpperCase();
 }
 function light(id){
   for (const b of $$('#nav [data-tab]')) b.setAttribute('aria-current', b.dataset.tab === id ? 'page' : 'false');
@@ -101,6 +110,7 @@ export function openLanguage(){
   for (const b of $$('[data-l]', $('#sheetIn'))) b.onclick = async () => {
     pick($$('[data-l]', $('#sheetIn')), b);
     await changeLang?.(b.dataset.l);
+    paintLanguageButton();
   };
 }
 

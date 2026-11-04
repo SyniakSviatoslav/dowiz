@@ -51,19 +51,23 @@ pub(super) struct Venue {
     pub(super) hub: Hub,
     pub(super) stock: StockLog,
     pub(super) map: Vec<(String, String)>,
+    /// The catalogue's `(id, json)` rows the NAME match sees (`names.rs`); `p-roll` is always a product.
+    pub(super) catalogue: Vec<(String, String)>,
     pub(super) waiting: Waiting,
 }
 
 impl Venue {
     pub(super) fn new() -> Venue {
-        Venue { hub: Hub::create_sized(64 * 1024).unwrap(), stock: StockLog::create_sized(64 * 1024).unwrap(), map: vec![], waiting: Waiting::default() }
+        Venue { hub: Hub::create_sized(64 * 1024).unwrap(), stock: StockLog::create_sized(64 * 1024).unwrap(), map: vec![], catalogue: vec![], waiting: Waiting::default() }
     }
     pub(super) fn import(&mut self, sales: &[Mapped], now: i64) -> Outcome {
         let listed: Vec<OrderView> = crate::hubstore::orders_state(&self.hub).into_iter().map(OrderView::of_event).collect();
         let map = |c: &str| self.map.iter().find(|(k, _)| k == c).map(|(_, v)| v.clone());
-        let product = |p: &str| (p == "p-roll").then(|| ROLL.to_string());
+        let idx = crate::ebills::names::index(&self.catalogue, &[]);
+        let by_name = |n: &str| crate::ebills::names::resolve(&idx, n);
+        let product = |p: &str| self.catalogue.iter().find(|(id, _)| id == p).map(|(_, j)| j.clone()).or_else(|| (p == "p-roll").then(|| ROLL.to_string()));
         let supply = |_: &str| None;
-        let look = Lookups { map: &map, product: &product, supply: &supply };
+        let look = Lookups { map: &map, by_name: &by_name, product: &product, supply: &supply };
         let out = decide(&mut self.hub, &mut self.stock, &listed, &look, std::mem::take(&mut self.waiting), sales, now).unwrap();
         self.waiting = Waiting { bills: out.pending.clone(), leads: out.leads.clone() };
         out
@@ -192,6 +196,41 @@ fn a_mapped_code_draws_the_shelf_and_an_unmatched_one_does_not() {
     assert_eq!(led.level("salmon"), StockLevel { on_hand: -20, reserved: 0 }, "3 x 40 g served from 100 g");
     assert_eq!(dowiz_hub::stock::short(&led), vec![("salmon".to_string(), -20)]);
     assert!(led.stranded().is_empty(), "a served dish holds nothing");
+}
+
+/// THE NAME MATCH (operator 2026-11-03): a code the owner never mapped is
+/// written off through the ONE dish of the same name (case, spacing and
+/// diacritics apart), stamped `matched_by: name`; the owner's mapping still
+/// wins when set; two dishes under one name draw nothing and stay `ebills:`.
+#[test]
+fn an_unmapped_code_is_written_off_through_the_dish_of_the_same_name_unless_ambiguous() {
+    let mut v = Venue::new();
+    v.catalogue.push(("p-roll".into(), ROLL.into()));
+    v.stock.append(&StockEvent::Received { item: "salmon".into(), qty: 100 }).unwrap();
+    // The till spells it "SAKE  ROLL" and the catalogue "Sake roll": one dish.
+    let c1 = course(8701, "2", 1, &[Line("56", "SAKE  ROLL", 2, 250)], 0);
+    v.import(std::slice::from_ref(&c1), T0);
+    let o = v.order(&id_of(&c1));
+    assert_eq!((o["items"][0]["product_id"].as_str(), o["items"][0]["ebills_code"].as_str(), o["items"][0]["matched_by"].as_str()), (Some("p-roll"), Some("56"), Some("name")));
+    assert_eq!(v.stock.ledger().unwrap().level("salmon"), StockLevel { on_hand: 20, reserved: 0 }, "2 x 40 g served from 100 g, by name");
+
+    // THE OWNER'S MAPPING WINS over the name: code 57 is mapped to p-roll though its name is another dish's.
+    v.catalogue.push(("p-tuna".into(), r#"{"id":"p-tuna","name":"Tuna roll","price":300,"bom":[{"supply":"tuna","qty":30}]}"#.into()));
+    v.map.push(("57".into(), "p-roll".into()));
+    let c2 = course(8702, "2", 2, &[Line("57", "Tuna roll", 1, 300)], 60);
+    v.import(std::slice::from_ref(&c2), T0 + 60_000);
+    let o = v.order(&id_of(&c2));
+    assert_eq!((o["items"][0]["product_id"].as_str(), o["items"][0]["matched_by"].as_str()), (Some("p-roll"), Some("map")));
+    assert_eq!(v.stock.ledger().unwrap().level("salmon"), StockLevel { on_hand: -20, reserved: 0 }, "the mapping drew salmon, not tuna");
+
+    // AMBIGUOUS: a second "Sake roll" in the catalogue -- the name draws nothing and the line stays `ebills:56`.
+    v.catalogue.push(("p-roll-2".into(), r#"{"id":"p-roll-2","name":"sake roll","price":260,"bom":[{"supply":"salmon","qty":10}]}"#.into()));
+    let c3 = course(8703, "2", 3, &[Line("56", "Sake roll", 1, 250)], 120);
+    v.import(std::slice::from_ref(&c3), T0 + 120_000);
+    let o = v.order(&id_of(&c3));
+    assert_eq!(o["items"][0]["product_id"], json!("ebills:56"));
+    assert!(o["items"][0].get("matched_by").is_none());
+    assert_eq!(v.stock.ledger().unwrap().level("salmon"), StockLevel { on_hand: -20, reserved: 0 }, "ambiguous: nothing drawn");
 }
 
 /// LAW 3 on what the importer writes: total = Σ unit_price × quantity + fee

@@ -84,6 +84,10 @@ mod void;
 pub(crate) struct Lookups<'a> {
     /// ebills `itemCode` -> dowiz `product_id`, as the OWNER set it.
     pub(crate) map: &'a dyn Fn(&str) -> Option<String>,
+    /// The till's item NAME -> the one dish of that name in any of the venue's
+    /// languages (`names.rs`, operator 2026-11-03), asked only when the owner
+    /// mapped nothing for the code. Two dishes under the name answer `None`.
+    pub(crate) by_name: &'a dyn Fn(&str) -> Option<String>,
     /// dowiz `product_id` -> the catalogue record (for its `bom`).
     pub(crate) product: &'a dyn Fn(&str) -> Option<String>,
     /// supply id -> its record, so a dish with a semi-finished line draws raw leaves.
@@ -145,12 +149,17 @@ fn order(hub: &mut Hub, stock: &mut StockLog, look: &Lookups, out: &mut Outcome,
         let Some(code) = item.get("product_id").and_then(Value::as_str).and_then(|p| p.strip_prefix("ebills:")).map(str::to_string) else { continue };
         let name = item.get("name").and_then(Value::as_str).unwrap_or("").to_string();
         let qty = item.get("quantity").and_then(Value::as_i64).unwrap_or(0);
-        out.seen.push((code.clone(), name, item.get("unit_price").and_then(Value::as_i64).unwrap_or(0)));
+        out.seen.push((code.clone(), name.clone(), item.get("unit_price").and_then(Value::as_i64).unwrap_or(0)));
         // UNMATCHED STAYS `ebills:<code>` AND DRAWS NOTHING: a guess would
         // take the wrong salmon off the shelf. Matched lines draw their BOM.
-        if let Some(pid) = (look.map)(&code) {
+        // THE OWNER'S MAPPING FIRST; else the one dish of the same name
+        // (`names.rs`, operator 2026-11-03) -- and `matched_by` says which,
+        // so the tab can show what was decided for the owner and what by them.
+        let found = (look.map)(&code).map(|p| (p, "map")).or_else(|| (look.by_name)(&name).map(|p| (p, "name")));
+        if let Some((pid, how)) = found {
             item["ebills_code"] = json!(code);
             item["product_id"] = json!(pid);
+            item["matched_by"] = json!(how);
             if let Some(p) = (look.product)(&pid) {
                 bom.push((dowiz_hub::prep::for_ledger(look.supply, &p).0, qty));
             }

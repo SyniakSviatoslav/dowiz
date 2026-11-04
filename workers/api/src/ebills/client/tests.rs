@@ -16,10 +16,23 @@ fn every_path() -> Vec<Path> {
         Path::Root,
         Path::Account,
         Path::Sales { begin: "2026-09-22".into(), end: "2026-09-23".into(), pos: 1, size: 500 },
+        Path::Oldest { begin: "2026-08-24".into(), end: "2026-09-23".into(), pos: 1 },
         Path::Sale { id: 8602, pos: 1 },
         Path::Tables { pos: 1 },
         Path::Items { size: 500 },
     ]
+}
+
+/// The first run's one request: the same list, oldest first, one row -- and
+/// the same refusals as the list's (a day that is not a day, no point of sale).
+#[test]
+fn the_oldest_is_the_list_sorted_ascending_one_row() {
+    let url = Path::Oldest { begin: "2026-08-24".into(), end: "2026-09-23".into(), pos: 1 }.url().unwrap();
+    assert!(url.starts_with("https://www.ebills.al/api/sales?page=0&size=1&sort=id,asc&beginDate=2026-08-24&endDate=2026-09-23&"), "{url}");
+    assert!(url.ends_with("&currentPosId=1"), "{url}");
+    assert!(allowed(&url, false));
+    assert_eq!(Path::Oldest { begin: "2026-8-24".into(), end: "2026-09-23".into(), pos: 1 }.url(), None);
+    assert_eq!(Path::Oldest { begin: "2026-08-24".into(), end: "2026-09-23".into(), pos: 0 }.url(), None);
 }
 
 /// Every variant of the type is a read of an allow-listed path, with no body.

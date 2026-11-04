@@ -14,6 +14,7 @@ import * as Money from '/lib/money.js';
 import { venueClock } from '/lib/booking-time.js';
 import { safeGet, safeSet } from '/store/storage.js';
 import { lang, intlLocale } from '/store/i18n.js';
+import { tripFee, recall } from '/store/how.js';
 
 // ── which venue ─────────────────────────────────────────────────────────────
 // The host names the venue: `dubin-sushi.dowiz.org` is that venue's storefront.
@@ -43,8 +44,17 @@ export const state = {
   cart: {}, placing: false,
   q: '', sort: 'pop', availOnly: false, tag: null, avoid: [], avoidOpen: false,
   how: 'delivery', tip: 0, promo: null, geo: null, pin: null,
+  // THE HALL (store/how.js): the venue's plan once asked for, and the table chosen on it.
+  hallPlan: null, hallTable: null,
   currency: null, lastEta: null, sheetName: null,
 };
+// THE WAY THEY GET IT IS REMEMBERED FOR THE VISIT (store/how.js): a customer
+// who chose the hall in the cart has not chosen a delivery again at the
+// checkout. A table's signed code (store/table.js) still overrides this.
+{
+  const r = (() => { try { return recall(sessionStorage); } catch { return null; } })();
+  if (r) { state.how = r.how; state.hallTable = r.table; }
+}
 
 export const findProduct = id => state.products.get(id) || null;
 export function indexProducts(cats){
@@ -105,12 +115,10 @@ export const cartLines = () => Object.entries(state.cart)
   .filter(x => x.p && x.p.available);
 export const cartCount = () => cartLines().reduce((s, l) => s + l.q, 0);
 export const subtotal = () => cartLines().reduce((s, l) => s + lineUnit(l.p, l.m) * l.q, 0);
-export function deliveryFee(){
-  const L = state.loc; if (!L) return 0;
-  if (state.how === 'pickup' || state.how === 'table') return 0;   // no trip (A9)
-  if (L.freeDeliveryThreshold != null && subtotal() >= L.freeDeliveryThreshold) return 0;
-  return L.deliveryFee || 0;
-}
+/// The fee this basket pays for its journey: ONE rule, in store/how.js, the
+/// browser's copy of the hub's `fulfilment::fee`. A pickup, a table and the
+/// hall have no trip (A9, W-SERVICE-MODE); the hub's number is the one charged.
+export const deliveryFee = () => tripFee(state.how, subtotal(), state.loc);
 
 // ── money ───────────────────────────────────────────────────────────────────
 // Integer minor units in, formatted text out, never parsed back. The customer

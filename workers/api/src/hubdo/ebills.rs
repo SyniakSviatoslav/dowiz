@@ -6,7 +6,7 @@
 
 use super::HubImages;
 use crate::command::Refused;
-use crate::ebills::cmd::{ConfigIn, FloorIn, ImportIn, ImportOut, MapIn, ReportIn, TickIn};
+use crate::ebills::cmd::{ConfigIn, FloorIn, ImportIn, ImportOut, MapIn, ReportIn, SalesIn, TickIn};
 use crate::ebills::glue;
 use crate::ebills::import::{self, Lookups, Waiting};
 use crate::ebills::state::{self, Mapping, State, CEILING, FLOOR_IMAGE, IMAGE, K_MAP, K_STATE, ONE};
@@ -38,6 +38,8 @@ impl HubImages {
             "floor" => reply(self.ebills_floor(crate::body::parse(&mut req).await?).await?),
             "report" => reply(self.ebills_report(crate::body::parse(&mut req).await?).await?),
             "status" => Response::from_json(&self.ebills_status().await?),
+            // THE OWNER'S TILL TAB (W-EBILLS-TAB): the month's till orders and their numbers, from the log.
+            "sales" => Response::from_json(&self.ebills_sales(crate::body::parse(&mut req).await?).await?),
             "config" => reply(self.ebills_config(crate::body::parse(&mut req).await?).await?),
             "map" => reply(self.ebills_map(crate::body::parse(&mut req).await?).await?),
             // THE FISCAL SENDER (card L70, `hubdo/fiscal/send.rs`): the cron's
@@ -91,6 +93,9 @@ impl HubImages {
         let (_, mut hub) = self.log_hub().await?;
         let (stock_gen, mut stock) = self.stock_log_at(input.now_ms).await?;
         let before = stock.len();
+        // THE NAME MATCH (operator 2026-11-03, `ebills::names`): every name every dish has, the
+        // translation table's included, so an unmapped till line draws through the one dish of its name.
+        let i18n = self.i18n_rows().await;
         let out = {
             let map = |code: &str| state::get::<Mapping>(&t, K_MAP, code).ok().flatten().map(|m| m.product_id);
             let waiting = Waiting { bills: st.pending.clone(), leads: st.leads.clone() };
@@ -98,7 +103,9 @@ impl HubImages {
             // as the empty catalogue `with_catalog` hands over does.
             let decided = self.with_catalog(|c| {
                 let (product, supply) = (|pid: &str| c.product(pid), |sid: &str| c.supply(sid));
-                let look = Lookups { map: &map, product: &product, supply: &supply };
+                let idx = crate::ebills::names::index(&c.products(), &i18n);
+                let by_name = |name: &str| crate::ebills::names::resolve(&idx, name);
+                let look = Lookups { map: &map, by_name: &by_name, product: &product, supply: &supply };
                 import::decide(&mut hub, &mut stock, &listed, &look, waiting, &input.sales, input.now_ms)
             });
             match decided.await? {
@@ -179,6 +186,14 @@ impl HubImages {
             None => Value::Null,
         };
         status::view(&t, &products, floor).map_err(bad)
+    }
+
+    /// The owner's till tab (`ebills::sales::month`): the log's till orders of
+    /// the last `sales::DAYS` days and the numbers over them, in the venue's zone.
+    async fn ebills_sales(&self, input: SalesIn) -> Result<Value> {
+        let (_, listed) = self.orders_view().await?;
+        let zone = crate::services::analytics::handler::zone_of(&self.catalogue().await?);
+        Ok(crate::ebills::sales::month(&listed, zone, input.now_ms))
     }
 
     /// The owner's configuration (`glue::apply_config`); the password is

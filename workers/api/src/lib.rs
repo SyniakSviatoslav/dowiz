@@ -548,6 +548,7 @@ pub(crate) fn router<R: routes_dispatch::Routes>(r: R) -> R {
         .get_async("/api/owner/ebills", |r, c| edge::run(r, c, ebills::routes::status))
         .post_async("/api/owner/ebills/config", |r, c| edge::run(r, c, ebills::routes::config))
         .post_async("/api/owner/ebills/map", |r, c| edge::run(r, c, ebills::routes::map))
+        .get_async("/api/owner/ebills/sales", |r, c| edge::run(r, c, ebills::routes::sales)) // W-EBILLS-TAB: the month's till orders and their numbers
         .get_async("/api/owner/sms", |r, c| edge::run(r, c, notify::sms::routes::status)).post_async("/api/owner/sms", |r, c| edge::run(r, c, notify::sms::routes::set)) // W-SMS
         .post_async("/api/owner/sms/test", |r, c| edge::run(r, c, notify::sms::routes::test)).post_async("/api/owner/sms/stop", |r, c| edge::run(r, c, notify::sms::routes::stop))
         .get_async("/api/public/locations/:slug/sms", |r, c| edge::run(r, c, notify::sms::routes::box_for))

@@ -34,6 +34,7 @@ log.frame       3 stamp|kindasu8|idb.len()asu8|idb|order_json.as_bytes()  chain:
 log.order       1 id,customer_id,status,items[product_id,modifier_ids,quantity,unit_price],subtotal,total,created_at_ms,channel,cash_pay_with  event::migration_tests::the_kernel_snapshot_round_trips
 log.delta       1 _d,_x  event::migration_tests::old_deltas_still_fold
 log.placed      1 at_ms,code,conflicts,discount,ebills_changed,ebills_code,ebills_revision,log_cis_len,product_id,promo,sale_id,total  event::migration_tests::every_log_kind_round_trips
+log.placed      2 at_ms,code,conflicts,discount,ebills_changed,ebills_code,ebills_revision,log_cis_len,matched_by,product_id,promo,sale_id,total  ebills::sales::tests::placed_gained_matched_by_and_the_laws_hold
 log.advanced    1 at,by,cash_collected,currency,ebills_voided_by,from,money_taken,order_id,owed,reason,refund,rejection_reason,sale_id,status  event::migration_tests::every_log_kind_round_trips
 log.paid        1 amount,amount_in_order_currency,amount_received,applied,at,at_ms,bill,by,courses,currency,duplicate,ebills_bill_revision,ebills_changed,fic,ignored,iic,inv_ord_num,log_cis_len,method,ok,payment,payment_intent,payment_status,payments,rate_ppm,retry,sale_id,stripe_event,till_id,tip,total,unapplied,uuid,wallet  event::migration_tests::every_log_kind_round_trips
 log.revealed    1 address,at,by,id,name,orders,phone,reason,status,total  event::migration_tests::every_log_kind_round_trips

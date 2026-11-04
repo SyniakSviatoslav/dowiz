@@ -24,7 +24,7 @@ const OWNER = [];
 export const SECTION_CAPS = {
   inbox: OWNER, bookings: PASS, floorPlan: PASS, tableQr: OWNER,
   promos: OWNER, posts: OWNER, campaigns: OWNER, social: OWNER, bagQr: OWNER,
-  analytics: OWNER, customers: OWNER, staff: OWNER, exceptions: OWNER,
+  analytics: OWNER, ebillsSales: OWNER, customers: OWNER, staff: OWNER, exceptions: OWNER,
   learn: KITCHEN,
   venue: OWNER, hours: KITCHEN, deliveryTerms: OWNER, deliveryArea: OWNER, payments: OWNER,
   branding: OWNER, features: OWNER, preview: KITCHEN, pubMenu: OWNER,

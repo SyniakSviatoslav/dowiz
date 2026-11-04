@@ -166,6 +166,8 @@ pub const BROWSER: &[DeviceKey] = &[
     key("dw_lang", &[], "store"),
     key("dw_table", &[], "store"),
     key("dw_src", &[], "store"), // W-QR: `{src:"bag", c}` until checkout, sessionStorage only
+    // W-SERVICE-MODE (store/how.js): delivery / pickup / dine_in for this tab, sessionStorage only: a word, nothing personal.
+    key("dw_how", &[], "store"),
     key("dw_install_asked", &[], "store"),
     key("dw_install_hide", &[], "store"),
     prefix("dw_boot_", &[], "store"),

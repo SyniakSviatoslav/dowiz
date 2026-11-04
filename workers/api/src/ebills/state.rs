@@ -43,6 +43,9 @@ const SLACK: i64 = 5_000;
 pub(crate) const SALES_OPEN_MS: i64 = 5 * MINUTE;
 pub(crate) const SALES_CLOSED_MS: i64 = 30 * MINUTE;
 pub(crate) const REREAD_MS: i64 = 24 * 60 * MINUTE;
+/// How far back a venue's FIRST run reads (`history.rs`): the till's history
+/// the owner asked to see, and the hub's own hot-log window (`keepMs`, 30 d).
+pub(crate) const HISTORY_DAYS: i64 = 30;
 const BACKOFF_CAP_MS: i64 = 60 * MINUTE;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -177,6 +180,8 @@ pub(crate) struct Plan {
     pub(crate) today: String,
     pub(crate) yesterday: String,
     pub(crate) week_ago: String,
+    /// `HISTORY_DAYS` back: where a first run starts (`history.rs`).
+    pub(crate) history_from: String,
     /// See `State::lead_below`.
     pub(crate) lead_below: i64,
     /// A re-check pass is under way: read closed courses from `recheck_from`.
@@ -213,6 +218,7 @@ pub(crate) fn plan(cfg: Option<&Config>, st: &State, now_ms: i64, open: bool, lo
         today: day(0),
         yesterday: day(1),
         week_ago: day(7),
+        history_from: day(HISTORY_DAYS),
         lead_below: st.lead_below,
         recheck_from: st.recheck_from,
         recheck_until: st.recheck_until,

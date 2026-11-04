@@ -11,6 +11,7 @@
 
 import { $, $$, esc, icon, t, api, post, toast, sheet, money, ago, store, busy, switchEl } from '/admin/core.js';
 import { ui, k, btn, field, select, pill, loading, rowDiv } from '/admin/parts.js';
+import '/admin/ebills-sales-i18n.js'; // the till tab's words, for the row that opens it
 
 /// Every call names the venue in the query: the bodies are closed shapes.
 const q = () => '?location_id=' + encodeURIComponent(store.loc || '');
@@ -43,6 +44,7 @@ export async function open(){
       ${(st.short || []).length ? row('alert-circle', 'eb_short', st.short.map(([i, n]) => `${esc(i)} ${esc(n)}`).join(' · ')) : ''}
       ${(st.refused || []).length ? row('x', 'eb_refused', st.refused.slice(-5).map(r => `#${esc(r.sale_id)} ${esc(r.why)}`).join(' / ')) : ''}
       ${rowDiv({ leading: icon('receipt'), title: { t: 'fx_title' }, sub: ui.label(k('fx_openHint')), trailing: btn({ id: 'ebFiscal', key: 'fx_open', tour: 'ebills.fiscal' }) })}
+      ${rowDiv({ leading: icon('chart-bar'), title: { t: 'es_seeSales' }, sub: ui.label(k('es_seeSalesSub')), trailing: btn({ id: 'ebSales', key: 'fx_open' }) })}
     </div>
     <section class="group mt-3"><p class="eyebrow" data-t="eb_unmatched"></p><p class="muted small" data-t="eb_unmatchedHint"></p>
       <div class="rows" data-tour="ebills.unmatched">${(d.unmatched || []).map(u => rowDiv({ leading: icon('plug-connected-x'), title: u.name, data: { code: u.code },
@@ -68,6 +70,8 @@ export async function open(){
 function wire(){
   // FISCAL SENDING (card L70) has its own sheet: arming it is a legal act.
   $('#ebFiscal').onclick = async () => (await import('/admin/fiscal.js')).open();
+  // THE TILL TAB (W-EBILLS-TAB): the month's sales and their numbers, read-only.
+  $('#ebSales').onclick = async () => (await import('/admin/ebills-sales.js')).open();
   for (const b of $$('.eb-map', $('#ebBody'))) b.onclick = async () => {
     const r = b.closest('[data-code]'); const pid = $('.eb-pick', r).value;
     if (!pid) return toast(t('eb_pick'));

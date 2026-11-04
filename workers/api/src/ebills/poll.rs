@@ -166,7 +166,7 @@ async fn walk(c: &mut Client, plan: &Plan, venue: &str, input: &mut ImportIn, no
     let pos = plan.pos_id;
     let path = Path::Sales { begin: plan.yesterday.clone(), end: plan.today.clone(), pos, size: PAGE };
     let list = parse_list(&c.read(&path).await?).map_err(Fail::Shape)?;
-    let ids: Vec<i64> = list.sales.iter().map(|s| s.id).collect();
+    let ids = super::history::ids(c, plan, &list).await?; // the window's ids; a FIRST run adds the month's oldest
     let bills: Vec<i64> = list.sales.iter().filter(|s| classify(s) == Ok(Kind::Bill)).map(|s| s.id).collect();
     let mut w = Walker::new(plan.watermark, &ids, &bills, BUDGET, LEAD_IDS, plan.lead_below);
     let result = loop {

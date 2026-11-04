@@ -52,9 +52,12 @@
        behind it, so a logo that does not load leaves a readable header. -->
   <img class="brand-mark" id="brandMark" alt="" width="40" height="40" hidden><span class="brand-mark brand-mono" id="brandMono" aria-hidden="true" hidden></span>
   <span class="brand" id="brandName">…</span>
-  <!-- Two decisions, two controls: what I read in, what I count in. -->
-  <button class="ui-iconbtn icon-btn glass" id="langBtn" type="button" data-tour="top.lang" data-t-attr="aria-label:language title:language">
-    <i class="ti ti-torii ui-i" aria-hidden="true"></i></button>
+  <!-- Two decisions, two controls: what I read in, what I count in. Each
+       shows its state -- the language code, the currency code -- beside a
+       glyph that names the decision: a guest read the torii as decoration
+       and never found the language (2026-11-03). -->
+  <button class="ui-iconbtn icon-btn glass cur-btn lang-btn" id="langBtn" type="button" data-tour="top.lang" data-t-attr="aria-label:language title:language">
+    <i class="ti ti-language ui-i" aria-hidden="true"></i><span class="cur-code lang-code" id="langCode"></span></button>
   <button class="ui-iconbtn icon-btn glass cur-btn" id="curBtn" type="button" data-tour="top.currency" data-t-attr="aria-label:currency title:currency">
     <i class="ti ti-coin-hole ui-i" aria-hidden="true"></i><span class="cur-code money" id="curCode"></span></button>
 </div></header>

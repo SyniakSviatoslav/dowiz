@@ -89,6 +89,14 @@ pub(crate) struct ConfigIn {
     pub(crate) password: Option<String>,
 }
 
+/// `sales`: the owner's tab -- the till's orders of the last `sales::DAYS`
+/// days and their numbers, from the venue's own log (W-EBILLS-TAB).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SalesIn {
+    pub(crate) now_ms: i64,
+}
+
 /// `map`: set (or, with no product, clear) the crosswalk for one code.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

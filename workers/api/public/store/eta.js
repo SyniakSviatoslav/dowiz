@@ -11,13 +11,15 @@
 // cannot outlive the order it described.
 
 import { API, SLUG, state, cartLines } from '/store/state.js';
+import { leavesTheBuilding } from '/store/how.js';
 
 let inflight = null;
 
 /// `{ min, max, text }` in minutes, or null when the kernel refuses (an empty
 /// basket has no estimate) or the network is away. A null is rendered as
 /// nothing, never as "0 min".
-export async function quoteEta({ pickup = state.how === 'pickup' || state.how === 'table', pin = state.pin, geo = state.geo } = {}){
+/// `pickup` is "no road": a counter, a signed table and the hall alike (store/how.js).
+export async function quoteEta({ pickup = !leavesTheBuilding(state.how), pin = state.pin, geo = state.geo } = {}){
   const lines = cartLines();
   if (!lines.length) return null;
   const sig = JSON.stringify([lines.map(l => [l.p.id, l.q]), pickup, pin, geo]);

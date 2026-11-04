@@ -39,7 +39,7 @@ impl HubImages {
     /// The translation table's rows, for the dish matcher. A table that cannot
     /// be read leaves the venue's own names, which are still a menu -- exactly
     /// what `voice::menu::load` did when it read the table across the hop.
-    async fn i18n_rows(&self) -> Vec<(String, String)> {
+    pub(super) async fn i18n_rows(&self) -> Vec<(String, String)> {
         match self.image(crate::hubstore::IMAGE_I18N).await {
             Ok(Some((_, b))) => dowiz_hub::table::Table::load(&b, crate::hubstore::I18N_BYTES)
                 .map(|t| t.all(crate::hubstore::I18N_KIND).into_iter().map(|(k, v)| (k.to_string(), v.to_string())).collect())

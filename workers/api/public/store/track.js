@@ -40,7 +40,8 @@ const FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'IN_DELIVERY', 'DELI
 /// A pickup ends at the counter. On the delivery path a collected order was
 /// "step 1 of 6, next: confirmed", and the page went on polling for ever.
 const PICKUP_FLOW = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'PICKED_UP'];
-const flowOf = order => order?.fulfilment?.kind === 'pickup' ? PICKUP_FLOW : FLOW;
+// Only a delivery has a courier leg: a pickup and an order in the hall end at the counter or the table.
+const flowOf = order => order?.fulfilment?.kind === 'delivery' || !order?.fulfilment?.kind ? FLOW : PICKUP_FLOW;
 /// How often the order is re-asked while it is live, and how many misses in a
 /// row before the customer is told the page has lost the hub.
 const POLL_MS = 12_000;

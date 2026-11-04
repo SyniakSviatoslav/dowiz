@@ -42,13 +42,18 @@ pub(crate) mod cmd;
 pub(crate) mod client;
 pub(crate) mod fetch;
 pub(crate) mod glue;
+pub(crate) mod history; // where a venue's FIRST run starts: the till's last 30 days, not yesterday
 pub(crate) mod import;
 pub(crate) mod judge;
 #[cfg(test)]
 mod live;
+#[cfg(test)]
+mod live_tab; // the tab and the analytics from the real till's answers, natively (W-EBILLS-TAB proof)
 pub(crate) mod map;
+pub(crate) mod names; // a till line's dish by its NAME, for the write-off (operator 2026-11-03)
 pub(crate) mod poll;
 pub(crate) mod routes;
+pub(crate) mod sales; // the owner's tab: the month's till sales and their numbers (W-EBILLS-TAB)
 pub(crate) mod state;
 pub(crate) mod status;
 mod time;

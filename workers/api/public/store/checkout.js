@@ -18,7 +18,8 @@ import { state, API, SLUG, cartLines, subtotal, lineUnit, saveCart, addresses, r
 import { safeGet, safeSet } from '/store/storage.js';
 import { t, lang } from '/store/i18n.js';
 import { $, $$, esc, icon, sheet, closeSheet, toast, whenSheetCloses } from '/store/ui.js';
-import { totalsBlock, refreshTotals, refreshBar } from '/store/cart.js';
+import { totalsBlock, refreshTotals, refreshBar, howBlock, wireHow, loadHall } from '/store/cart.js';
+import { hallTable, missing, fulfilmentBody, leavesTheBuilding, PICKUP } from '/store/how.js';
 import { quoteEta } from '/store/eta.js';
 import { seaCalm, seaEvent } from '/store/sea.js';
 import { consentMarkup, wireConsent, consentBody } from '/store/consent.js';
@@ -159,20 +160,20 @@ export function openCheckout(){
   if (!TABLE && L?.minOrder && s < L.minOrder) return toast(`${t('min')}: ${money(L.minOrder)}`);
   seaCalm(true);
   whenSheetCloses(() => seaCalm(false));
-  const pickup = state.how === 'pickup' && L?.pickup;
+  // THE WAY THEY GET IT decides every block under it (store/how.js): only a
+  // delivery has an address, a courier's tip and a road; the hall has a table.
+  const trip = !TABLE && leavesTheBuilding(state.how);
+  const pickup = !TABLE && state.how === PICKUP;
+  loadHall();
   sheet(`
     <p class="eyebrow" data-t="checkout"></p>
     <h2 data-t="summary"></h2>
     ${tableBanner()}${bagLine()}
     <p class="geo" id="ckEta" hidden></p>
 
-    ${L?.pickup && !TABLE ? `<h3 class="fsec" data-t="how"></h3>
-    <div class="seg" role="radiogroup" data-t-attr="aria-label:how">
-      ${seg({ on: !pickup, icon: 'bike', label: k('toDoor'), attrs: { data: { how: 'delivery' } }, tour: 'checkout.delivery' })}
-      ${seg({ on: !!pickup, icon: 'walk', label: k('toPickup'), attrs: { data: { how: 'pickup' } }, tour: 'checkout.pickup' })}
-    </div>` : ''}
+    ${howBlock({ tables: true })}
 
-    <div id="addrBox" ${pickup || TABLE ? 'hidden' : ''}>
+    <div id="addrBox" ${trip ? '' : 'hidden'}>
       <h3 class="fsec" data-t="address"></h3>
       ${savedAddressMarkup()}
       ${ghost({ id: 'pinGo', cls: 'mb-2', icon: 'navigation', label: k('pickOnMap'), tour: 'checkout.map' })}
@@ -201,8 +202,8 @@ export function openCheckout(){
     ${railMarkup()}
 
     <h3 class="fsec" data-t="extras"></h3>
-    ${ui.field({ id: 'f-note', label: k(pickup || TABLE ? 'kitchenNote' : 'note'), placeholder: k('ex_note'), attrs: { data: { tour: 'checkout.note' } } })}
-    ${on('tips') ? `<div id="tipBox" ${pickup || TABLE ? 'hidden' : ''}><label data-t="tip"></label>
+    ${ui.field({ id: 'f-note', label: k(trip ? 'note' : 'kitchenNote'), placeholder: k('ex_note'), attrs: { data: { tour: 'checkout.note' } } })}
+    ${on('tips') ? `<div id="tipBox" ${trip ? '' : 'hidden'}><label data-t="tip"></label>
     <div class="seg" role="radiogroup" data-t-attr="aria-label:tip">
       ${TIPS.map(v => `<button type="button" class="seg-b ${state.tip === v ? 'on' : ''}" data-tip="${v}" data-tour="checkout.tip" aria-pressed="${state.tip === v}">${v ? moneyEl(v) : `<span data-t="tipNo"></span>`}</button>`).join('')}
     </div></div>` : ''}
@@ -233,25 +234,23 @@ export function openCheckout(){
   wireConsent(); wireSms();
 
   const etaLine = async () => {
-    const collecting = state.how === 'pickup' && L?.pickup;
-    const e = await quoteEta({ pickup: collecting || !!TABLE });   // a table has no road
+    const road = !TABLE && leavesTheBuilding(state.how);   // a table, a counter and the hall have no road
+    const e = await quoteEta({ pickup: !road });
     const el = $('#ckEta'); if (!el || $('#sheet').dataset.name !== 'checkout') return;
     el.hidden = !e;
-    if (e) el.innerHTML = `${icon('clock')} ${esc(t(collecting ? 'ready' : 'etaRange'))}: <b>${esc(e.text)} ${esc(t('etaMin'))}</b>`;
+    if (e) el.innerHTML = `${icon('clock')} ${esc(t(road ? 'etaRange' : 'ready'))}: <b>${esc(e.text)} ${esc(t('etaMin'))}</b>`;
   };
   etaLine();
 
-  // delivery / collection: every courier-only block follows the choice
-  for (const b of $$('[data-how]', $('#sheetIn'))) b.onclick = () => {
-    state.how = b.dataset.how;
-    const collecting = state.how === 'pickup';
-    for (const x of $$('[data-how]', $('#sheetIn'))) { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', String(x === b)); }
-    const box = $('#addrBox'); if (box) box.hidden = collecting;
-    const pl = $('#pickupLine'); if (pl) pl.hidden = !(collecting && L?.address);
-    const tips = $('#tipBox'); if (tips) tips.hidden = collecting;
-    const nl = $('label[for="f-note"] [data-t]'); if (nl) { nl.dataset.t = collecting ? 'kitchenNote' : 'note'; nl.textContent = t(nl.dataset.t); }
-    refreshTotals(); etaLine();
-  };
+  // delivery / collection / the hall: every courier-only block follows the choice
+  wireHow(how => {
+    const road = leavesTheBuilding(how);
+    const box = $('#addrBox'); if (box) box.hidden = !road;
+    const pl = $('#pickupLine'); if (pl) pl.hidden = !(how === PICKUP && L?.address);
+    const tips = $('#tipBox'); if (tips) tips.hidden = !road;
+    const nl = $('label[for="f-note"] [data-t]'); if (nl) { nl.dataset.t = road ? 'note' : 'kitchenNote'; nl.textContent = t(nl.dataset.t); }
+    etaLine();
+  });
 
   // saved addresses: pick fills the field (and the pin, when it had one)
   const addrBox = $('#addrBox');
@@ -366,8 +365,13 @@ async function place(pay, wallet){
   const addr = $('#f-street') ? addressLine(parts) : '';
   const errs = [];
   if (phone && phone.replace(/\D/g, '').length < PHONE_MIN_DIGITS) errs.push(t('badPhone'));
-  const collecting = state.how === 'pickup' && state.loc?.pickup;
-  if (!collecting && !TABLE && !addr) errs.push(t('address') + ': ' + t('required'));
+  // WHAT EACH WAY CANNOT BE PLACED WITHOUT, said here first in the guest's
+  // language (the hub's `fulfilment::needs` says it again, in English).
+  const trip = !TABLE && leavesTheBuilding(state.how);
+  const table = hallTable(state.hallPlan, state.hallTable);
+  const need = TABLE ? null : missing(state.how, { addressLine: addr, table });
+  if (need === 'address') errs.push(t('address') + ': ' + t('required'));
+  if (need === 'table') errs.push(t('tblTable') + ': ' + t('required'));
   // ORDER FOR LATER: a time already too close is said here, before the hub says it.
   const when = scheduledAt();
   if (when !== null && when < Date.now() + LATER_MIN_LEAD_MS) errs.push(t('laterPast'));
@@ -380,20 +384,21 @@ async function place(pay, wallet){
   if (errs.length) { $('#f-err').scrollIntoView({ block: 'center', behavior: 'smooth' }); return; }
 
   safeSet('dw_name', name); safeSet('dw_phone', phone); safeSet('dw_addr', addr); safeSet(ADDR_KEY, JSON.stringify(parts));
-  if (!collecting && !TABLE) rememberAddress({ line: addr, lat: state.pin?.lat ?? null, lng: state.pin?.lng ?? null });
+  if (trip) rememberAddress({ line: addr, lat: state.pin?.lat ?? null, lng: state.pin?.lng ?? null });
   state.placing = true; $('#place').disabled = true; $('#place').textContent = t('ordering');
   const geo = state.pin ? { lat_udeg: Math.round(state.pin.lat * 1e6), lon_udeg: Math.round(state.pin.lng * 1e6) } : (state.geo || {});
   const eta = state.lastEta;
   try {
     const items = cartLines().map(l => ({ product_id: l.p.id, modifier_ids: l.m, quantity: l.q, unit_price: lineUnit(l.p, l.m) }));
     const personal = await tasteBody(phone);
+    // ONE SHAPE PER WAY (store/how.js): the hub prices the trip from `kind`
+    // (`fulfilment::fee`), so the fee the sheet showed is the fee charged.
     const body = JSON.stringify({ items, contact: { name, phone },
-        fulfilment: collecting ? { kind: 'pickup', note: note || null }
-                               : { kind: 'delivery', address: { line: addr, note: note || null, parts, ...geo } },
+        fulfilment: fulfilmentBody(state.how, { address: { line: addr, parts, ...geo }, note, table }),
         payment: pay, locale: lang, ...consentBody(phone), ...smsBody(phone), ...personal,
         ...(pay === 'crypto' && wallet ? { crypto_symbol: wallet } : {}),
         ...(state.promo ? { promo: state.promo.code } : {}),
-        ...(state.tip && !collecting && !TABLE ? { tip: state.tip } : {}),
+        ...(state.tip && trip ? { tip: state.tip } : {}),
         ...(TABLE ? tableBody(note) : {}),
         ...(scheduledAt() ? { scheduled_for_ms: scheduledAt() } : {}), ...bagBody() });
     // THE SAME BASKET SENT AGAIN IS THE SAME ORDER (order-key.js): the Worker
