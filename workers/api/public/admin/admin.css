@@ -209,6 +209,13 @@ button{cursor:pointer}
    zero; the revenue cell is money and never animates. */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--space-2);margin-bottom:var(--space-4)}
 @media (max-width:420px){ .stats{grid-template-columns:repeat(2,1fr)} }
+/* A sheet is narrower than the window on a desktop (480 px beside the app):
+   the window query above never fires there and four money tiles ran past the
+   sheet's edge (Till sales, 2026-11-04). Inside a sheet the sheet's own width
+   decides. Nothing inside #sheetIn is position:fixed, so its containment is
+   harmless. */
+#sheetIn{container-type:inline-size}
+@container (max-width:560px){ .stats:not(.strip){grid-template-columns:repeat(2,1fr)} }
 .stat{padding:12px 14px;border-radius:var(--radius-card);background:var(--brand-surface);box-shadow:var(--elevation-1)}
 .stat small{display:block;font-size:var(--text-xs);font-weight:var(--weight-medium);color:var(--brand-text-muted);margin-bottom:2px}
 .stat b{font-size:var(--text-xl);font-weight:800;letter-spacing:-.02em;font-variant-numeric:tabular-nums;color:var(--brand-text)}
