@@ -97,6 +97,47 @@ fn an_older_row_above_a_today_row_is_real_so_the_scan_does_not_stop() {
     assert_eq!(tiles(&listed, "loc_sushi", DAY), old_tiles(&listed, "loc_sushi", DAY));
 }
 
+/// W-OWNER-CPU: the object folds the tiles (`/fold/dashboard`) EXACTLY as the Worker did --
+/// every order across the hop, the venue's record for the zone, `tiles` over them -- and the
+/// Worker's route relays that answer: one `/fold/*` request, the same bytes, ~100 of them.
+#[test]
+fn the_object_folds_the_tiles_the_worker_used_to_and_the_worker_relays_them() {
+    use crate::edge::mem::object_paths;
+    use crate::edge::site::{get, As, Site, PLATFORM_HOST};
+    use crate::storefront::route_tests::{open_venue, place_pickup};
+    let site = Site::new();
+    let (t, dish) = open_venue(&site, "alpha", "a@x.test");
+    place_pickup(&site, "alpha", &dish, 2);
+    place_pickup(&site, "alpha", &dish, 1);
+    // THE OLD WORKER PATH, as the oracle (`owner::dashboard` before this lane).
+    let listed: Vec<OrderView> = serde_json::from_slice(site.fold("alpha", "/fold/orders").body()).expect("orders");
+    assert_eq!(listed.len(), 2, "two orders placed");
+    let venue = site.fold("alpha", "/fold/venue").body_value();
+    let zone = crate::hubstore::zone_of(Some(&venue).filter(|v| !v.is_null()));
+    let day_start = dowiz_hub::tz::start_of_local_day_ms(zone, site.now_ms);
+    let want = tiles(&listed, "alpha", day_start);
+    assert_eq!((want.count, want.pending), (2, 2), "{want:?}: not vacuous");
+    let want = json!({
+        "todayOrders": want.count, "todayRevenue": want.revenue,
+        "pending": want.pending, "active": want.active, "dayStartMs": day_start
+    });
+    // THE OBJECT'S FOLD.
+    let folded = site.fold("alpha", &format!("/fold/dashboard?venue=alpha&now={}", site.now_ms));
+    assert_eq!(folded.status_code(), 200, "{}", folded.body_str());
+    assert_eq!(folded.body_value(), want);
+    assert!(folded.body().len() < 200, "{} bytes cross, not the orders", folded.body().len());
+    // THE WORKER RELAYS IT: the same bytes, after one `/fold/dashboard` and nothing else of the venue's.
+    let from = object_paths().len();
+    let url = format!("https://alpha.{PLATFORM_HOST}/api/owner/dashboard?location_id=alpha");
+    let r = site.run(crate::owner::dashboard, get(&url).bearer(&t).on("alpha"), &[]);
+    assert_eq!(r.status_code(), 200, "{}", r.body_str());
+    assert_eq!(r.body(), folded.body(), "relayed byte for byte");
+    let folds: Vec<String> = object_paths()[from..].iter().filter(|p| p.starts_with("/fold/")).cloned().collect();
+    assert_eq!(folds, ["/fold/dashboard"], "the orders never cross the hop");
+    // THE FOLD NEEDS A VENUE AND A CLOCK, as every read does.
+    assert_eq!(site.fold("alpha", "/fold/dashboard?venue=alpha").status_code(), 400);
+}
+
 #[test]
 #[ignore]
 fn measure_loopa_row3() {

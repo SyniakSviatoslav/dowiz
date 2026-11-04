@@ -195,7 +195,10 @@ pub(crate) async fn send_to(stub: &crate::edge::Stub, venue: &str, kind: Kind, c
     init.with_method(Method::Post).with_body(Some(json.into_bytes()));
     let mut call = Call::new_with_init("https://hub/fold/command", &init)?;
     call.headers_mut()?.set("content-type", "application/json")?;
-    stub.fetch_with_request(call).await
+    // RELAYED, NOT READ (W-OWNER-CPU): the object's answer is the client's answer, so its body
+    // -- the console's 1.76 MB queue on dubin-durres -- is piped through and never copied into
+    // this Worker's wasm. A caller reads only the status (`media.rs`); the body is not readable.
+    stub.relay(call).await
 }
 
 /// The request the Worker received, rebuilt for the handler.

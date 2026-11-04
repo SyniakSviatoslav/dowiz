@@ -75,6 +75,35 @@ pub(crate) async fn send<I: Serialize, O: DeserializeOwned>(
     what: &str,
     input: &I,
 ) -> std::result::Result<O, (u16, String)> {
+    let (stub, req) = call(place, what, input)?;
+    let mut res =
+        stub.fetch_with_request(req).await.map_err(|e| (503, format!("hub unavailable: {e}")))?;
+    let status = res.status_code();
+    if status == 200 {
+        return res.json().await.map_err(|e| (500, format!("{what}: unreadable answer: {e}")));
+    }
+    Err((status, res.text().await.unwrap_or_default()))
+}
+
+/// THE SAME COMMAND, ITS ANSWER HANDED ON AS IT CAME (W-OWNER-CPU). For a route whose only
+/// work after the object answers was `Response::from_json(&value)` -- parsing the body and
+/// encoding it again, 851 KB of it for the till tab on dubin-durres, in a Worker that has
+/// 10 ms -- the object's status, headers and body pass through untouched (`Stub::relay`:
+/// the body is never in wasm). A refusal is the object's own status and words, exactly as
+/// `send`'s caller rebuilt them; a failure to send is the same 503 / 500 as `send`'s.
+pub(crate) async fn relay<I: Serialize>(place: &crate::hubstore::Place, what: &str, input: &I) -> Result<Response> {
+    let (stub, req) = match call(place, what, input) {
+        Ok(v) => v,
+        Err((status, msg)) => return Response::error(msg, status),
+    };
+    match stub.relay(req).await {
+        Ok(res) => Ok(res),
+        Err(e) => Response::error(format!("hub unavailable: {e}"), 503),
+    }
+}
+
+/// The object and the `POST /fold/<what>` for it, with `input` as its JSON body.
+fn call<I: Serialize>(place: &crate::hubstore::Place, what: &str, input: &I) -> std::result::Result<(Stub, Request), (u16, String)> {
     let stub = place.stub().map_err(|e| (503, format!("hub unavailable: {e}")))?;
     let body = serde_json::to_string(input).map_err(|e| (500, format!("{what}: {e}")))?;
     let mut req = Request::new_with_init(
@@ -85,11 +114,5 @@ pub(crate) async fn send<I: Serialize, O: DeserializeOwned>(
     req.headers_mut()
         .and_then(|h| h.set("content-type", "application/json"))
         .map_err(|e| (500, format!("{what}: {e}")))?;
-    let mut res =
-        stub.fetch_with_request(req).await.map_err(|e| (503, format!("hub unavailable: {e}")))?;
-    let status = res.status_code();
-    if status == 200 {
-        return res.json().await.map_err(|e| (500, format!("{what}: unreadable answer: {e}")));
-    }
-    Err((status, res.text().await.unwrap_or_default()))
+    Ok((stub, req))
 }

@@ -27,11 +27,13 @@ async fn place_of(req: &Request, ctx: &RouteContext<crate::Req>) -> Result<std::
     }
 }
 
+/// The object's answer, HANDED ON (W-OWNER-CPU). This parsed the answer into a `Value` and
+/// encoded it again: 851 KB for the till tab on dubin-durres, 42-55 ms of CPU in a Worker
+/// with 10 ms, and the console's tabs opening together were killed (`exceededCpu`, then the
+/// shim's refusal) -- 8 of 8 answered 503. The status, headers and body now pass through
+/// untouched (`command::relay`); the owner check above it is where it was.
 async fn command<I: serde::Serialize>(place: &Place, what: &str, input: &I) -> Result<Response> {
-    match crate::command::send::<_, Value>(place, what, input).await {
-        Ok(v) => Response::from_json(&v),
-        Err((status, msg)) => Response::error(msg, status),
-    }
+    crate::command::relay(place, what, input).await
 }
 
 /// `GET /api/owner/ebills`

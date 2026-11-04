@@ -133,6 +133,30 @@ fn status(site: &Site, t: &str) -> Value {
     r.body_value()
 }
 
+/// W-OWNER-CPU: the till routes RELAY the object's answer. The status route's bytes are the
+/// object's own (`/fold/ebills/status`), not a parse and a re-encoding of them; the owner
+/// check still stands in front (another venue's owner naming alpha is refused below).
+#[test]
+fn the_till_routes_relay_the_objects_answer_byte_for_byte() {
+    let site = Site::new();
+    let (t, _dish) = open_venue(&site, "alpha", "a@x.test");
+    configure(&site, &t);
+    let direct = block_on(site.object("alpha").route(post("https://hub/fold/ebills/status", &json!({})))).expect("fold");
+    assert_eq!(direct.status_code(), 200, "{}", direct.body_str());
+    assert!(direct.body_value()["config"]["enabled"].as_bool().unwrap_or(false), "configured: {}", direct.body_str());
+    let r = site.run(crate::ebills::routes::status, get(&at("/api/owner/ebills")).bearer(&t).on("alpha"), &[]);
+    assert_eq!(r.status_code(), 200, "{}", r.body_str());
+    assert_eq!(r.body(), direct.body(), "relayed byte for byte");
+    assert_eq!(r.headers().get("content-type").ok().flatten().as_deref(), Some("application/json"));
+    // The sales tab likewise.
+    let direct = block_on(site.object("alpha").route(post("https://hub/fold/ebills/sales", &json!({"now_ms": site.now_ms})))).expect("fold");
+    let r = site.run(crate::ebills::routes::sales, get(&at("/api/owner/ebills/sales")).bearer(&t).on("alpha"), &[]);
+    assert_eq!((r.status_code(), r.body()), (direct.status_code(), direct.body()), "{}", r.body_str());
+    // And the owner check still stands in front of the relay.
+    let anon = site.run(crate::ebills::routes::status, get(&at("/api/owner/ebills")).on("alpha"), &[]);
+    assert_eq!(anon.status_code(), 401, "{}", anon.body_str());
+}
+
 fn tick(site: &Site, at_ms: i64) {
     block_on(super::tick_venue(&site.env(), "alpha", at_ms));
 }

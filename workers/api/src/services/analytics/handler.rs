@@ -42,7 +42,8 @@ pub async fn analytics(req: Request, ctx: RouteContext<crate::Req>) -> Result<Re
     if url.query_pairs().any(|(k, _)| k == "trace" || k == "verify") {
         ask.push_str("&op=trace");
     }
-    reply(crate::fold::ask::text(&place, &ask).await?)
+    // Handed on as it came (W-OWNER-CPU): the owner's numbers are the object's bytes, not a copy.
+    reply(crate::fold::ask::relay(&place, &ask).await?)
 }
 
 /// `POST /api/owner/analytics/history`. On the QA hub alone,
@@ -116,11 +117,12 @@ pub async fn after_rotation(place: &crate::hubstore::Place, now: i64) {
     }
 }
 
-fn reply((status, text): (u16, String)) -> Result<Response> {
-    if status != 200 {
-        return Response::error(text, status);
+/// The object's answer as the owner's: a refusal passes with the object's status and words; a
+/// 200 is JSON, nobody's to cache. The body is the object's and is not read here.
+fn reply(mut out: Response) -> Result<Response> {
+    if out.status_code() != 200 {
+        return Ok(out);
     }
-    let mut out = Response::ok(text)?;
     out.headers_mut().set("content-type", "application/json")?;
     out.headers_mut().set("cache-control", "private, no-store")?;
     Ok(out)

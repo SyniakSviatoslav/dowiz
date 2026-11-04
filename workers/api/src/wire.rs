@@ -14,9 +14,10 @@
 //! the worker constructors would have produced (content types copied from worker 0.8.5).
 
 mod fields;
-mod upgrade;
+/// A platform response whose body stays outside wasm: an upgrade, or a relayed answer.
+mod held;
 pub use fields::Fields;
-use upgrade::Upgrade;
+use held::Held;
 
 use serde::Serialize;
 use worker::{Error, Method, Result, Url};
@@ -154,8 +155,9 @@ pub struct Reply {
     headers: Fields,
     /// `None` is worker's `ResponseBody::Empty`, which is not the same as zero bytes.
     body: Option<Vec<u8>>,
-    /// A `101` from a Durable Object, kept untouched (see `upgrade.rs`).
-    upgrade: Upgrade,
+    /// A `101` from a Durable Object kept untouched, or a relayed answer whose body never
+    /// entered wasm (see `held.rs`, W-OWNER-CPU).
+    held: Held,
 }
 
 
@@ -165,7 +167,7 @@ impl Reply {
         if let Some(t) = content_type {
             let _ = headers.set("content-type", t);
         }
-        Reply { status: 200, headers, body, upgrade: Upgrade::default() }
+        Reply { status: 200, headers, body, held: Held::default() }
     }
     pub fn from_json<B: Serialize>(value: &B) -> Result<Self> {
         match serde_json::to_string(value) {
@@ -204,12 +206,15 @@ impl Reply {
         Ok(self.clone())
     }
     pub async fn text(&mut self) -> Result<String> {
+        self.unreadable()?;
         String::from_utf8(self.body().to_vec()).map_err(|e| Error::RustError(e.to_string()))
     }
     pub async fn bytes(&mut self) -> Result<Vec<u8>> {
+        self.unreadable()?;
         Ok(self.body().to_vec())
     }
     pub async fn json<T: serde::de::DeserializeOwned>(&mut self) -> Result<T> {
+        self.unreadable()?;
         serde_json::from_slice(self.body()).map_err(|e| Error::RustError(e.to_string()))
     }
     /// A platform response (a Durable Object's, a `fetch`'s), read whole.
@@ -220,10 +225,10 @@ impl Reply {
         }
         let status = res.status_code();
         if status == 101 {
-            return Ok(Reply { status, headers, body: None, upgrade: Upgrade(std::rc::Rc::new(std::cell::RefCell::new(Some(res)))) });
+            return Ok(Reply { status, headers, body: None, held: Held::of(held::Mode::Upgrade, res) });
         }
         let body = Some(res.bytes().await?);
-        Ok(Reply { status, headers, body, upgrade: Upgrade::default() })
+        Ok(Reply { status, headers, body, held: Held::default() })
     }
     pub fn with_status(mut self, status: u16) -> Self {
         self.status = status;
@@ -238,6 +243,8 @@ impl Reply {
     pub fn status_code(&self) -> u16 {
         self.status
     }
+    /// The bytes read into the Worker; EMPTY for a relayed reply (`is_relayed`), whose body is held
+    /// outside wasm and cannot be read here.
     pub fn body(&self) -> &[u8] {
         self.body.as_deref().unwrap_or(&[])
     }
@@ -253,7 +260,7 @@ impl Reply {
 
     /// The Workers edge: the response the worker constructors would have built.
     pub fn into_response(self) -> Result<worker::Response> {
-        if let Some(res) = self.upgrade.0.borrow_mut().take() {
+        if let Some(res) = self.held_response()? {
             return Ok(res);
         }
         let mut b = worker::Response::builder().with_status(self.status);

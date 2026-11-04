@@ -70,22 +70,22 @@ pub async fn stock(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respon
     // catalogue and the stock log are both there, `shelf` folds them there,
     // and the screen's answer alone crosses the hop.
     let url = format!("https://hub/fold/stock?now={}", ctx.data.now_ms);
-    let (_, _loc, (status, text)) = match crate::services::identity::staff::guard::staff_beside(
+    // Handed on as it came (W-OWNER-CPU): the shelf grows with the stock log; none of it is copied here.
+    let (_, _loc, mut out) = match crate::services::identity::staff::guard::staff_beside(
         &req,
         &ctx,
         &place,
         &crate::services::identity::staff::guard::SHELF,
-        crate::fold::ask::text(&place, &url),
+        crate::fold::ask::relay(&place, &url),
     )
     .await
     {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
-    if status != 200 {
-        return Response::error(text, status);
+    if out.status_code() != 200 {
+        return Ok(out);
     }
-    let mut out = Response::ok(text)?;
     out.headers_mut().set("content-type", "application/json")?;
     Ok(out)
 }

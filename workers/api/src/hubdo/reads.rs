@@ -12,6 +12,7 @@
 //!   GET /fold/week_top?venue=&now=   the storefront's "most ordered this week" (W-MR0)
 //!   GET /fold/prep?venue=&now=[&day=]   (W-PREP, `forecast.rs`)
 //!   GET /fold/haccp?kind=&from=&to=&names=  the HACCP CSV (P13, W-STORE, `stock/haccp.rs`)
+//!   GET /fold/dashboard?venue=&now=   the owner's four tiles (W-OWNER-CPU, `owner/dashboard.rs`)
 
 use super::HubImages;
 use worker::*;
@@ -53,8 +54,32 @@ impl HubImages {
             "exceptions" => self.fold_exceptions(req).await,
             "week_top" => self.fold_week_top(req).await,
             "haccp" => self.fold_haccp(req).await,
+            "dashboard" => self.fold_dashboard(req).await,
             _ => Response::error("no such fold", 404),
         }
+    }
+
+    /// `/fold/dashboard?venue=&now=`: the owner's four tiles (W-OWNER-CPU). The Worker's
+    /// `owner::dashboard` pulled EVERY folded order across the hop and parsed each to count
+    /// them -- 1.76 MB on dubin-durres, 38-65 ms of a 10 ms stateless Worker. The orders
+    /// projection and the venue's record are both here; the fold is the very function the
+    /// Worker ran (`owner::dashboard::tiles`), over the same day boundary
+    /// (`tz::start_of_local_day_ms` of the venue's zone, read off the same record `/fold/venue`
+    /// answers), and ~100 bytes cross. `now` is the WORKER's clock, as every fold's is.
+    pub(super) async fn fold_dashboard(&self, req: &Request) -> Result<Response> {
+        let (venue, now) = match venue_and_now(req)? {
+            Ok(v) => v,
+            Err(r) => return Ok(r),
+        };
+        let record = self.venue_record().await?.and_then(|j| serde_json::from_str::<serde_json::Value>(&j).ok()).filter(|v| !v.is_null());
+        let zone = crate::hubstore::zone_of(record.as_ref());
+        let day_start = dowiz_hub::tz::start_of_local_day_ms(zone, now);
+        let (_, listed) = self.orders_view().await?;
+        let crate::owner::dashboard::Tiles { count, revenue, pending, active } = crate::owner::dashboard::tiles(&listed, &venue, day_start);
+        Response::from_json(&serde_json::json!({
+            "todayOrders": count, "todayRevenue": revenue,
+            "pending": pending, "active": active, "dayStartMs": day_start
+        }))
     }
 
     /// See the module: `services::analytics::handler::answer_with`, over the

@@ -167,6 +167,17 @@ impl Stub {
             }
         }
     }
+    /// THE SAME CALL, FOR AN ANSWER THE WORKER ONLY HANDS ON (W-OWNER-CPU): the object's status
+    /// and headers come back as a `Reply`, its body stays on the platform response and is piped
+    /// to the client by `Reply::into_response` -- not one of its bytes is copied into wasm or
+    /// parsed. In process (`Own`, `Mem`) there is no hop, so the answer is the whole `Reply`,
+    /// which is what makes the relay testable: the bytes a test reads are the bytes relayed.
+    pub async fn relay(&self, req: Call) -> Result<Reply> {
+        match self {
+            Stub::Live(s) => Ok(Reply::relay_from_worker(s.fetch_with_request(req.into_worker()?).await?)),
+            _ => self.fetch_with_request(req).await,
+        }
+    }
 }
 
 /// `worker::RouteContext`: the request's data, the bindings, and the path's parameters.

@@ -109,6 +109,7 @@ pub(crate) const EDGES: &[Edge] = &[
     read("week_top", &["log", "catalog"]),
     read("prep", &["log", "catalog", "stock", "cube", "bookings"]),
     read("haccp", &["catalog", "stock"]),
+    read("dashboard", &["log", "catalog"]), // the owner's tiles over the orders projection and the venue's zone (W-OWNER-CPU)
     read("reveals", LOG),
     read("assist", &["log", "catalog", "stock"]),
     read("graph", &["log", "catalog", "stock"]),

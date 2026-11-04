@@ -12,7 +12,7 @@ use worker::*;
 #[allow(unused_imports)] use crate::{edge::{Ctx as RouteContext, Date, Env, ObjectNamespace, Stub}, wire::{Call as Request, Fields as Headers, Reply as Response, RequestInit}};
 
 use crate::auth::{self, Principal};
-mod dashboard; mod routed; pub use routed::{assign_courier, order_action, orders}; pub use crate::catalog_edit::routed::{update_location, update_product, write_translations}; // W-BN4B, W-D9: run whole by the venue's object
+pub(crate) mod dashboard; mod routed; pub use routed::{assign_courier, order_action, orders}; pub use crate::catalog_edit::routed::{update_location, update_product, write_translations}; // W-BN4B, W-D9: run whole by the venue's object
 
 // `now_ms()` WAS HERE, and nothing calls it any more.
 //
@@ -617,52 +617,23 @@ pub(crate) async fn order_action_at(mut req: Request, ctx: RouteContext<crate::R
 /// that can drift.
 pub async fn dashboard(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let place = crate::hubstore::Place::of_any(&req, &ctx).await?;
-    // The membership query and the image read do not depend on each other, so
-    // `owner_beside` runs them together. The token is still verified before
-    // either is issued -- see it for why that order matters.
-    // THE ORDERS, FOLDED, AND NOTHING ELSE. This route fetched the catalogue
-    // beside the log "because the readiness count needs it" -- and then never
-    // touched it: the tally below reads only the orders. So the dashboard was
-    // paying for a whole second image on every poll to satisfy a comment.
-    // The orders and the venue's own record, together. The record is ~1 KB from
-    // `/fold/venue` -- NOT the catalogue image it lives in -- so this is a
-    // second round trip in parallel rather than a second image in series. It is
-    // here because the day boundary below needs the venue's time zone and
-    // getting that wrong is what this whole change is about.
-    let (_, loc, (listed, venue)) = match owner_beside(
-        &req,
-        &ctx,
-        &place,
-        futures_util::future::try_join(
-            crate::hubstore::orders(&place),
-            crate::hubstore::venue_record(&place),
-        ),
-    )
-    .await
-    {
+    // THE TILES ARE FOLDED IN THE OBJECT (W-OWNER-CPU, `/fold/dashboard`, `hubdo/reads.rs`).
+    // This route pulled EVERY folded order across the hop (`hubstore::orders`: 1.76 MB on
+    // dubin-durres after the till import) and parsed each to count four numbers: 38-65 ms of CPU
+    // for an 89-byte answer, in a Worker that has 10 ms; under the console's opening burst the
+    // isolate was killed. The object holds the orders and the venue's record already, so the
+    // same `dashboard::tiles` runs there, over the same `tz::start_of_local_day_ms` day boundary
+    // (see that function for the summer-offset defect it closed), and ~100 bytes cross -- as a
+    // relay, not even those parsed here. The membership check is unchanged and still runs
+    // beside the read, before the answer is handed back (`owner_beside`).
+    let url = format!("https://hub/fold/dashboard?venue={}&now={}", crate::mcp::enc(&place.venue), ctx.data.now_ms);
+    let (_, _loc, tiles) = match owner_beside(&req, &ctx, &place, crate::fold::ask::relay_ok(&place, &url)).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
-
-    // "Today" starts at local midnight FOR THE VENUE.
-    //
-    // This was `let tz_offset_ms: i64 = 2 * 60 * 60 * 1000; // Europe/Tirane,
-    // standard time` -- and Europe/Tirane's standard time is UTC+1. The
-    // constant was the SUMMER offset, so from 01:00 UTC on 25 October 2026 this
-    // owner's day would have begun an hour early, every day, until the last
-    // Sunday of March. `tz::start_of_local_day_ms` also handles the two days a
-    // year when the offset in force now is not the offset that was in force at
-    // midnight; see its comment for why one pass and two passes are both wrong.
-    let zone = crate::hubstore::zone_of(venue.as_ref());
-    let now = ctx.data.now_ms;
-    let day_start = dowiz_hub::tz::start_of_local_day_ms(zone, now);
-
-    // The tally is `owner::dashboard::tiles` (W-LOOPA row 3): seq tested before any parse.
-    let dashboard::Tiles { count, revenue, pending, active } = dashboard::tiles(&listed, &loc, day_start);
-    Response::from_json(&json!({
-        "todayOrders": count, "todayRevenue": revenue,
-        "pending": pending, "active": active, "dayStartMs": day_start
-    }))
+    // `_loc` IS `place.venue`: `owner_beside` has just checked it (`must_be`), so the venue the
+    // object tallied for is the venue the caller was authorised for.
+    Ok(tiles)
 }
 
 /// The dish sheet's save body (`update_product`). Parsed by `body::strict`,

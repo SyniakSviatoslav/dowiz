@@ -183,16 +183,16 @@ pub async fn export(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respo
             crate::mcp::enc(&to),
             crate::mcp::enc(&serde_json::to_string(&names).unwrap_or_default())
         );
-        crate::fold::ask::text(&place, &ask).await
+        // Handed on as it came (W-OWNER-CPU): the CSV grows with the stock log; not copied here.
+        crate::fold::ask::relay(&place, &ask).await
     };
-    let (_, _loc, (status, text)) = match crate::owner::owner_beside(&req, &ctx, &place, work).await {
+    let (_, _loc, mut out) = match crate::owner::owner_beside(&req, &ctx, &place, work).await {
         Ok(v) => v,
         Err(r) => return Ok(r),
     };
-    if status != 200 {
-        return Response::error(text, status);
+    if out.status_code() != 200 {
+        return Ok(out);
     }
-    let mut out = Response::ok(text)?;
     out.headers_mut().set("content-type", "text/csv; charset=utf-8")?;
     out.headers_mut().set("content-disposition", &format!("attachment; filename=\"haccp-{kind}-{from}-{to}.csv\""))?;
     Ok(out)

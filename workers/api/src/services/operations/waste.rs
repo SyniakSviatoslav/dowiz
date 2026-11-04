@@ -221,11 +221,11 @@ pub async fn waste_report(req: Request, ctx: RouteContext<crate::Req>) -> Result
     // DERIVED IN THE OBJECT (BN1, `/fold/waste`, `hubdo/facts.rs`): the stock
     // journal and the order log are both there; `report` runs there and the
     // report alone crosses the hop, with the object's own status and words.
-    let (status, text) = crate::fold::ask::text(&place, &format!("https://hub/fold/waste?venue={}", crate::mcp::enc(&loc))).await?;
-    if status != 200 {
-        return Response::error(text, status);
+    // Handed on as it came (W-OWNER-CPU): the report grows with the logs; none of it is copied here.
+    let mut out = crate::fold::ask::relay(&place, &format!("https://hub/fold/waste?venue={}", crate::mcp::enc(&loc))).await?;
+    if out.status_code() != 200 {
+        return Ok(out);
     }
-    let mut out = Response::ok(text)?;
     out.headers_mut().set("content-type", "application/json")?;
     Ok(out)
 }

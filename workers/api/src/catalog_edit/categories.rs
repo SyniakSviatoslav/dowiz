@@ -18,8 +18,9 @@ pub async fn list_categories(req: Request, ctx: RouteContext<crate::Req>) -> Res
     // The venue this caller was authorised for, and no other.
     let place = crate::hubstore::Place::of_authorised(&ctx, &loc)?;
     // DERIVED IN THE OBJECT (BN1, `/fold/catalogue?q=categories`): the list is
-    // built there by `categories_view` and the list alone crosses the hop.
-    Response::from_json(&crate::fold::ask::catalogue(&place, "q=categories").await?)
+    // built there by `categories_view` and the list alone crosses the hop --
+    // and is handed on as it came, not parsed and encoded again (W-OWNER-CPU).
+    crate::fold::ask::relay_ok(&place, "https://hub/fold/catalogue?q=categories").await
 }
 
 /// Every category with its dish count, EMPTY ONES INCLUDED, sorted as the

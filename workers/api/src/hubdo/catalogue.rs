@@ -102,12 +102,19 @@ impl HubImages {
     /// A venue with no catalogue yet answers `null`, which is not an error:
     /// the caller falls back to the default zone and says so.
     pub(super) async fn fold_venue(&self) -> Result<Response> {
-        // In place (W-ZC). A storage error still propagates (the `?` on the cold read);
-        // an unreadable image still answers `null`, as the `.ok()` here always did.
+        let rec = self.venue_record().await?;
+        json_body(rec.unwrap_or_else(|| "null".to_string()))
+    }
+
+    /// The venue's own record as JSON text, or `None` for a venue with no catalogue yet. In
+    /// place (W-ZC). A storage error still propagates (the `?` on the cold read); an unreadable
+    /// image still answers `None`, as `fold_venue`'s `.ok()` always did. Shared by `/fold/venue`
+    /// and the dashboard's day boundary (`/fold/dashboard`, W-OWNER-CPU), so both read the zone
+    /// off the same record.
+    pub(super) async fn venue_record(&self) -> Result<Option<String>> {
         if !self.mem.borrow().contains_key(CATALOG_IMAGE) {
             self.image(CATALOG_IMAGE).await?;
         }
-        let rec = self.with_catalog(|c| c.location()).await.ok().flatten();
-        json_body(rec.unwrap_or_else(|| "null".to_string()))
+        Ok(self.with_catalog(|c| c.location()).await.ok().flatten())
     }
 }

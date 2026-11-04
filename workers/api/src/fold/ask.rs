@@ -26,6 +26,27 @@ pub async fn json(place: &Place, url: &str) -> Result<serde_json::Value> {
     serde_json::from_str(&body).map_err(|e| Error::RustError(format!("hub object answered {url} unreadably: {e}")))
 }
 
+/// `GET url` HANDED ON AS IT CAME (W-OWNER-CPU): the object's status, headers and body, the body
+/// never entering wasm (`Stub::relay`). For a route that only passed the object's answer to the
+/// client -- `text` then `Response::ok(text)` with a content type, or `json` then
+/// `Response::from_json(&v)` -- and so copied, or parsed and re-encoded, a body that grows with
+/// the venue (163 KB of dishes, 1.76 MB of orders) inside the Free plan's 10 ms. The caller may
+/// still set headers on what comes back; it cannot read the body (`Reply::is_relayed`).
+pub async fn relay(place: &Place, url: &str) -> Result<Response> {
+    place.stub()?.relay(Request::new(url, Method::Get)?).await
+}
+
+/// `relay`, with `json`'s contract: a non-200 is the object failing, not the caller being told
+/// no, so it is an `Err` naming the url and the status (the words stayed on the platform).
+pub async fn relay_ok(place: &Place, url: &str) -> Result<Response> {
+    let res = relay(place, url).await?;
+    let status = res.status_code();
+    if status != 200 {
+        return Err(Error::RustError(format!("hub object refused {url}: {status}")));
+    }
+    Ok(res)
+}
+
 /// One derived node of the catalogue (`hubdo/catalogue.rs`, BN1): `query` is
 /// the `q=<what>&...` the object dispatches on, already URL-encoded.
 pub async fn catalogue(place: &Place, query: &str) -> Result<serde_json::Value> {
@@ -44,3 +65,6 @@ pub async fn block(place: &Place, name: &str) -> Result<Option<Vec<u8>>> {
         s => Err(Error::RustError(format!("hub object refused {url}: {s} {}", res.text().await.unwrap_or_default()))),
     }
 }
+
+#[cfg(test)]
+mod tests;

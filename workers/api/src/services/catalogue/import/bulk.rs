@@ -136,12 +136,14 @@ pub async fn owner_products(req: Request, ctx: RouteContext<crate::Req>) -> Resu
         Some(id) => format!("q=owner_products&id={}", crate::mcp::enc(id)),
         None => "q=owner_products".to_string(),
     };
-    let (_, _loc, products) =
-        match crate::services::identity::staff::guard::staff_beside(&req, &ctx, &place, &crate::services::identity::staff::guard::MENU, crate::fold::ask::catalogue(&place, &query)).await {
+    // RELAYED (W-OWNER-CPU): the object's JSON was parsed here and encoded again -- 163 KB on
+    // dubin-durres, 15-18 ms of a 10 ms Worker. It now passes through untouched.
+    let url = format!("https://hub/fold/catalogue?{query}");
+    let (_, _loc, mut res) =
+        match crate::services::identity::staff::guard::staff_beside(&req, &ctx, &place, &crate::services::identity::staff::guard::MENU, crate::fold::ask::relay_ok(&place, &url)).await {
             Ok(v) => v,
             Err(r) => return Ok(r),
         };
-    let mut res = Response::from_json(&products)?;
     // Costs and recipes are the venue's; nothing between here and the owner keeps a copy.
     res.headers_mut().set("cache-control", "private, no-store")?;
     Ok(res)

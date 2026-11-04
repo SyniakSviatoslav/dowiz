@@ -67,11 +67,12 @@ pub async fn prep(req: Request, ctx: RouteContext<crate::Req>) -> Result<Respons
     if let Some((_, d)) = url.query_pairs().find(|(k, _)| k == "day") {
         ask.push_str(&format!("&day={}", enc(&d)));
     }
-    let (status, text) = crate::fold::ask::text(&place, &ask).await?;
-    if status != 200 {
-        return Response::error(text, status);
+    // Handed on as it came (W-OWNER-CPU): a refusal with the object's status and words, a 200
+    // as JSON the Worker never copied.
+    let mut out = crate::fold::ask::relay(&place, &ask).await?;
+    if out.status_code() != 200 {
+        return Ok(out);
     }
-    let mut out = Response::ok(text)?;
     out.headers_mut().set("content-type", "application/json")?;
     out.headers_mut().set("cache-control", "private, no-store")?;
     Ok(out)
