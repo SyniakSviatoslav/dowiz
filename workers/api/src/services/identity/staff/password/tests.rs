@@ -2,13 +2,13 @@ use super::*;
 use crate::auth::hash_password;
 use dowiz_hub::caps::Preset;
 
-/// `staff::staff_password` (the route, main 282d2c45) decides through
-/// `self_change` and writes through `store_hash` -- the rules tested here are
-/// the route's, not a copy of them.
+/// `staff::staff_password_at` (the route's body, main 282d2c45; since W-LOGIN-DO run by the
+/// platform object, `staff_password` only forwards) decides through `self_change` and writes
+/// through `store_hash` -- the rules tested here are the route's, not a copy of them.
 #[test]
 fn the_route_asks_these_rules() {
     let route = include_str!("../../staff.rs");
-    let body = &route[route.find("pub async fn staff_password").expect("the route")..];
+    let body = &route[route.find("pub async fn staff_password_at").expect("the route's body")..];
     let body = &body[..body.find("\n}\n").expect("its end")];
     for n in ["password::self_change(", "password::store_hash(", "password::end_sessions("] {
         assert!(body.contains(n), "staff_password does not call {n}");

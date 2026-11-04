@@ -35,8 +35,13 @@ pub struct CourierRefreshIn {
     pub refresh_token: String,
 }
 
-/// `POST /api/courier/auth/refresh`
-pub async fn courier_refresh(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+/// `POST /api/courier/auth/refresh`, forwarded whole to the platform object (W-LOGIN-DO).
+pub async fn courier_refresh(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::accounts::routed::forward_platform(crate::hubdo::command::Kind::CourierRefresh, req, ctx).await
+}
+
+/// The renewal itself, run in the platform object's turn.
+pub async fn courier_refresh_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: CourierRefreshIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -100,8 +105,13 @@ pub async fn courier_refresh(mut req: Request, ctx: RouteContext<crate::Req>) ->
     }))
 }
 
-/// `POST /api/staff/refresh` -- the bearer is the proof; the row slides.
+/// `POST /api/staff/refresh` -- the bearer is the proof; the row slides. Forwarded (W-LOGIN-DO).
 pub async fn staff_refresh(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::accounts::routed::forward_platform(crate::hubdo::command::Kind::StaffRefresh, req, ctx).await
+}
+
+/// The renewal itself, run in the platform object's turn.
+pub async fn staff_refresh_at(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let now = ctx.data.now_ms;
     let p = match auth::authenticate(&req, &ctx.env, now).await {
         Ok(p) => p,

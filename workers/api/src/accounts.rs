@@ -26,6 +26,8 @@ use crate::auth::{
 // absolute cap that bounds both (`auth::SESSION_ABSOLUTE_MS`). Renewal for the
 // courier and for staff lives in `session_renew`.
 pub mod session_renew;
+/// The doors run by the platform object (W-LOGIN-DO): the Worker forwards, the object runs `*_at`.
+pub mod routed;
 /// Two tabs refreshing together is not an attack. The old service picked five
 /// seconds after a bug where honest double-fires logged people out everywhere.
 const CONCURRENT_REFRESH_GRACE_MS: i64 = 5_000;
@@ -217,8 +219,14 @@ enum Who {
     Courier,
 }
 
-/// `POST /api/auth/login` — owner, email + password.
-pub async fn owner_login(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+/// `POST /api/auth/login` — owner, email + password. Forwarded whole to the platform object
+/// (W-LOGIN-DO, `accounts/routed.rs`), which runs `owner_login_at`.
+pub async fn owner_login(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::accounts::routed::forward_platform(crate::hubdo::command::Kind::OwnerLogin, req, ctx).await
+}
+
+/// The login itself, run in the platform object's turn.
+pub async fn owner_login_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: LoginIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -356,8 +364,13 @@ pub async fn owner_login(mut req: Request, ctx: RouteContext<crate::Req>) -> Res
     }))
 }
 
-/// `POST /api/auth/refresh` — rotate within the family, detect reuse.
-pub async fn owner_refresh(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+/// `POST /api/auth/refresh` — rotate within the family, detect reuse. Forwarded (W-LOGIN-DO).
+pub async fn owner_refresh(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::accounts::routed::forward_platform(crate::hubdo::command::Kind::OwnerRefresh, req, ctx).await
+}
+
+/// The rotation itself, run in the platform object's turn.
+pub async fn owner_refresh_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: RefreshIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -530,8 +543,13 @@ pub async fn owner_refresh(mut req: Request, ctx: RouteContext<crate::Req>) -> R
     })
 }
 
-/// `POST /api/auth/logout` — every device, like the old service.
+/// `POST /api/auth/logout` — every device, like the old service. Forwarded (W-LOGIN-DO).
 pub async fn owner_logout(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::accounts::routed::forward_platform(crate::hubdo::command::Kind::OwnerLogout, req, ctx).await
+}
+
+/// The logout itself, run in the platform object's turn.
+pub async fn owner_logout_at(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let p = match auth::authenticate(&req, &ctx.env, ctx.data.now_ms).await {
         Ok(p) => p,
         Err(e) => return e.into_response(),
@@ -603,7 +621,13 @@ pub fn venue_for_login(
     }
 }
 
-pub async fn courier_login(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+/// Forwarded whole to the platform object (W-LOGIN-DO), which runs `courier_login_at`.
+pub async fn courier_login(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::accounts::routed::forward_platform(crate::hubdo::command::Kind::CourierLogin, req, ctx).await
+}
+
+/// The courier's login itself, run in the platform object's turn.
+pub async fn courier_login_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     #[derive(Deserialize)]
     #[serde(deny_unknown_fields)]
     struct In {
@@ -818,7 +842,12 @@ pub struct ClaimIn {
 ///
 /// The courier chooses their own password. An owner who set it for them would
 /// know it.
-pub async fn courier_claim(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub async fn courier_claim(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::accounts::routed::forward_platform(crate::hubdo::command::Kind::CourierClaim, req, ctx).await
+}
+
+/// The claim itself (one argon2 hash of the chosen password), run in the platform object's turn.
+pub async fn courier_claim_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: ClaimIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),

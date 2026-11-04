@@ -93,7 +93,12 @@ struct LoginIn {
 /// A person with no staff word here — a courier, a stranger, the unnamed fourth
 /// word — is refused exactly as a wrong password is not: the password was
 /// right, and they need the owner, not another try.
-pub async fn staff_login(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub async fn staff_login(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::accounts::routed::forward_platform(crate::hubdo::command::Kind::StaffLogin, req, ctx).await // W-LOGIN-DO
+}
+
+/// The login itself, run in the platform object's turn (`accounts/routed.rs`).
+pub async fn staff_login_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: LoginIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -136,7 +141,12 @@ struct PasswordIn {
 /// The old password is the credential, checked with the same work on a miss as
 /// on a hit, so this door is no easier to guess through than the login. Only
 /// the hash changes: the account, its memberships and its address stay put.
-pub async fn staff_password(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub async fn staff_password(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::accounts::routed::forward_platform(crate::hubdo::command::Kind::StaffPassword, req, ctx).await // W-LOGIN-DO
+}
+
+/// The change itself (two argon2 derivations), run in the platform object's turn.
+pub async fn staff_password_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: PasswordIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),
@@ -183,7 +193,12 @@ struct ClaimIn {
 /// owner of another venue, say — keeps its password: the claim must present it,
 /// or the code would be a way to take over somebody else's account by being
 /// invited under their address.
-pub async fn staff_claim(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+pub async fn staff_claim(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::accounts::routed::forward_platform(crate::hubdo::command::Kind::StaffClaim, req, ctx).await // W-LOGIN-DO
+}
+
+/// The claim itself, run in the platform object's turn.
+pub async fn staff_claim_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: ClaimIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),

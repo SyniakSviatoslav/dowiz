@@ -221,7 +221,12 @@ where
     for _ in 0..4 {
         let mut loaded = load_at(stub, image, ceiling_bytes).await?;
         let out = f(&mut loaded.table)?;
-        if save_at(stub, image, &mut loaded).await? {
+        // NOTHING CHANGED, NOTHING WRITTEN (W-LOGIN-DO). A refresh that answered "missing", a
+        // logout with no records of this user's, a bookkeeping write that found no record: each
+        // used to serialise the whole table and PUT it back under the guard, a generation bump
+        // and a chunk rewrite to persist what was already there. `Table::dirty` is whether a
+        // put or a remove happened; the caller's answer is the same either way.
+        if !loaded.table.dirty() || save_at(stub, image, &mut loaded).await? {
             return Ok(out);
         }
     }

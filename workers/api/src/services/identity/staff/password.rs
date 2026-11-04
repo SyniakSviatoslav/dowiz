@@ -107,8 +107,13 @@ struct ResetIn {
 
 /// `POST /api/owner/staff/:id/password` -- the owner sets a new password for a
 /// member of staff of their venue, and every session of that person there ends.
-/// Routed by the `lib.rs` line handed back to the main session.
-pub async fn owner_reset(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+/// Forwarded whole to the platform object (W-LOGIN-DO): the hash is an argon2 derivation.
+pub async fn owner_reset(req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
+    crate::accounts::routed::forward_platform(crate::hubdo::command::Kind::StaffReset, req, ctx).await
+}
+
+/// The reset itself, run in the platform object's turn.
+pub async fn owner_reset_at(mut req: Request, ctx: RouteContext<crate::Req>) -> Result<Response> {
     let body: ResetIn = match crate::body::parse(&mut req).await {
         Ok(b) => b,
         Err(e) => return Response::error(format!("bad request body: {e}"), 400),

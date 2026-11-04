@@ -94,6 +94,12 @@ impl Table {
         self.kv.to_bytes()
     }
 
+    /// Was a record put or removed since this table was loaded? `false` after a load that only
+    /// read: the bytes on disk are already this table, and a save would rewrite them for nothing.
+    pub fn dirty(&self) -> bool {
+        self.kv.is_dirty()
+    }
+
     pub fn usage(&self) -> crate::Usage {
         self.kv.usage()
     }

@@ -78,6 +78,12 @@ impl KvImage {
         Some(v.into_owned())
     }
 
+    /// Has anything been put or removed since the load? A caller that read, decided and changed
+    /// nothing has nothing to persist (W-LOGIN-DO: `platform_store::with_at` skips the write).
+    pub(crate) fn is_dirty(&self) -> bool {
+        !self.pending.is_empty()
+    }
+
     pub(crate) fn contains(&self, key: &str) -> bool {
         let r = self.db.begin_read();
         r.staged(&self.pending).contains(key.as_bytes()).unwrap_or(false)

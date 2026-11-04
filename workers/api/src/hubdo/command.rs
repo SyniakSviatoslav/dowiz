@@ -101,6 +101,19 @@ pub enum Kind {
     MenuRestore,
     /// `POST /api/owner/menu/import` (`catalogue::import::import_menu_at`): preview or apply a CSV.
     MenuImport,
+    // ── the sign-in doors, run by the PLATFORM object (W-LOGIN-DO, `accounts/routed.rs`: which
+    // handler each is, and why argon2 and the sessions image's rewrite run there, not here) ──
+    OwnerLogin,     // POST /api/auth/login
+    OwnerRefresh,   // POST /api/auth/refresh
+    OwnerLogout,    // POST /api/auth/logout
+    CourierLogin,   // POST /api/courier/auth/login
+    CourierClaim,   // POST /api/courier/auth/claim
+    CourierRefresh, // POST /api/courier/auth/refresh
+    StaffLogin,     // POST /api/staff/login
+    StaffClaim,     // POST /api/staff/claim
+    StaffPassword,  // POST /api/staff/password
+    StaffRefresh,   // POST /api/staff/refresh
+    StaffReset,     // POST /api/owner/staff/:id/password
 }
 
 impl Kind {
@@ -110,7 +123,7 @@ impl Kind {
             Kind::Place | Kind::Quote => &["slug"],
             Kind::ConsoleOrders | Kind::KitchenBoard | Kind::CourierTasks | Kind::CourierPosition => &[],
             Kind::ProductNew | Kind::ProductsDelete | Kind::CategorySet | Kind::Translations | Kind::Location | Kind::MenuRestore | Kind::MenuImport => &[],
-            Kind::ProductEdit | Kind::ProductDelete | Kind::CategoryDelete | Kind::ProductImage | Kind::ProductImageClear => &["id"],
+            Kind::ProductEdit | Kind::ProductDelete | Kind::CategoryDelete | Kind::ProductImage | Kind::ProductImageClear | Kind::StaffReset => &["id"],
             Kind::OrderAction
             | Kind::Assign
             | Kind::KitchenAck
@@ -120,6 +133,8 @@ impl Kind {
             | Kind::Track
             | Kind::Stamps
             | Kind::Feedback => &["id"],
+            Kind::OwnerLogin | Kind::OwnerRefresh | Kind::OwnerLogout | Kind::CourierLogin | Kind::CourierClaim | Kind::CourierRefresh => &[],
+            Kind::StaffLogin | Kind::StaffClaim | Kind::StaffPassword | Kind::StaffRefresh => &[],
         }
     }
 }
@@ -155,7 +170,11 @@ pub(crate) async fn forward(kind: Kind, req: Call, ctx: crate::edge::Ctx<crate::
 
 /// THE WORKER'S HALF: the whole request to the venue's object, in ONE request, and its
 /// answer back as it is -- status, headers (`idempotent-replay`) and body.
-pub(crate) async fn send(place: &crate::hubstore::Place, kind: Kind, ctx: &crate::edge::Ctx<crate::Req>, mut req: Call) -> Result<Reply> {
+pub(crate) async fn send(place: &crate::hubstore::Place, kind: Kind, ctx: &crate::edge::Ctx<crate::Req>, req: Call) -> Result<Reply> {
+    send_to(&place.stub()?, &place.venue, kind, ctx, req).await
+}
+
+pub(crate) async fn send_to(stub: &crate::edge::Stub, venue: &str, kind: Kind, ctx: &crate::edge::Ctx<crate::Req>, mut req: Call) -> Result<Reply> {
     let body = match req.text().await {
         Ok(t) => t,
         Err(e) => return Reply::error(format!("bad request body: {e}"), 400),
@@ -163,7 +182,7 @@ pub(crate) async fn send(place: &crate::hubstore::Place, kind: Kind, ctx: &crate
     let params = kind.params().iter().filter_map(|k| ctx.param(k).map(|v| (k.to_string(), v.clone()))).collect();
     let cmd = Command {
         kind,
-        venue: place.venue.clone(),
+        venue: venue.to_string(),
         params,
         method: req.method().to_string(),
         now_ms: ctx.data.now_ms,
@@ -176,7 +195,7 @@ pub(crate) async fn send(place: &crate::hubstore::Place, kind: Kind, ctx: &crate
     init.with_method(Method::Post).with_body(Some(json.into_bytes()));
     let mut call = Call::new_with_init("https://hub/fold/command", &init)?;
     call.headers_mut()?.set("content-type", "application/json")?;
-    place.stub()?.fetch_with_request(call).await
+    stub.fetch_with_request(call).await
 }
 
 /// The request the Worker received, rebuilt for the handler.
@@ -201,6 +220,10 @@ impl HubImages {
         if !self.state.is_me(&cmd.venue) {
             return Reply::error(format!("command: this object is not {}", cmd.venue), 409);
         }
+        // A sign-in runs in the platform object and nowhere else; a venue's command never there.
+        if (cmd.venue == crate::platform_store::PLATFORM) != crate::accounts::routed::at_platform(cmd.kind) {
+            return Reply::error(format!("command: {:?} does not run in {}", cmd.kind, cmd.venue), 409);
+        }
         let Some(base) = self.state.base_env() else {
             return Reply::error("command: no platform to run a command against", 500);
         };
@@ -215,6 +238,11 @@ impl HubImages {
         // not overlap the slots, and a placement's turn ran out of a test thread's 2 MiB).
         let (call, ctx) = match crate::catalog_edit::routed::in_object(cmd.kind, call, ctx) {
             Ok(edit) => return edit.await,
+            Err(back) => back,
+        };
+        // THE SIGN-IN DOORS (W-LOGIN-DO), built in their own frame likewise.
+        let (call, ctx) = match crate::accounts::routed::in_object(cmd.kind, call, ctx) {
+            Ok(door) => return door.await,
             Err(back) => back,
         };
         match cmd.kind {
