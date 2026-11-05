@@ -28,7 +28,9 @@ import os
 import subprocess
 import sys
 
-KEEP = ("workers/api/build/", "workers/api/.wrangler/", ".deploy-manifest")
+# crates/dowiz-hub/target/maingoal/: the maingoal gate's prebuilt binaries (its stamp, a hash of the
+# sources, refuses stale ones); wiping them made the gate REFUSE on every deploy.
+KEEP = ("workers/api/build/", "workers/api/.wrangler/", "crates/dowiz-hub/target/maingoal/", ".deploy-manifest")
 MANIFEST = ".deploy-manifest"
 
 
