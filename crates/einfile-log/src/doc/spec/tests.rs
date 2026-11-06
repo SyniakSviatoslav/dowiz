@@ -6,7 +6,7 @@ use super::super::verify::{verify, Trust};
 use super::super::{Doc, DocError, Ids, FLAG_SELF_DESCRIBING};
 use super::{read_blob, read_spec, SpecIn, DIGEST_BLOB, DIGEST_SPEC, LAYOUT_BLOB, LAYOUT_SPEC, SPEC_CELLS};
 use crate::{Record, Store, ARENA, FLAG_SHA256};
-use dowiz_core::sha256_hw::sha256_hw as sha256;
+use crate::doc::tests::sha256;
 
 fn st_digest(layout: &str) -> i64 {
     let d = sha256(layout.as_bytes());

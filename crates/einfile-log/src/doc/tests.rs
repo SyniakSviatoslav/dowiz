@@ -12,6 +12,13 @@ use crate::{EvLog, Record, Store};
 
 pub(crate) const ALG_TOY: i64 = 1;
 
+/// sha256 for the tests, from the RustCrypto `sha2` dev-dependency (MIT OR Apache-2.0): the
+/// library itself holds no hash.
+pub(crate) fn sha256(bytes: &[u8]) -> [u8; 32] {
+    use sha2::Digest as _;
+    sha2::Sha256::digest(bytes).into()
+}
+
 /// FNV-1a 64 over four salted lanes, spread to 32 bytes. Not a hash function anyone should
 /// trust; a deterministic 32-byte function of its input is all these tests need.
 pub(crate) fn mix(parts: &[&[u8]]) -> [u8; 32] {

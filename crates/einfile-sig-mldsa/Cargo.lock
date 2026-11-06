@@ -47,10 +47,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dowiz-core"
-version = "0.1.0"
-
-[[package]]
 name = "einfile-crc"
 version = "0.1.0"
 
@@ -72,7 +68,6 @@ dependencies = [
 name = "einfile-sig-mldsa"
 version = "0.1.0"
 dependencies = [
- "dowiz-core",
  "einfile-image",
  "einfile-log",
  "fips204",

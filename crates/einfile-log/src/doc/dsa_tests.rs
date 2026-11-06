@@ -1,27 +1,30 @@
-//! THE REAL SEAL: ML-DSA-65 (FIPS 204) through the `Signer` / `Verifier` seams, from
-//! `dowiz-core` as a DEV-dependency only -- the library stays MIT OR Apache-2.0 with no
-//! signature code; `cargo tree -e no-dev` of this crate shows einfile-image alone.
+//! THE REAL SEAL: ML-DSA-65 (FIPS 204) through the `Signer` / `Verifier` seams, from the
+//! `fips204` crate (MIT OR Apache-2.0) as a DEV-dependency only -- the library holds no signature
+//! code; `cargo tree -e no-dev` of this crate shows einfile-image alone. `einfile-sig-mldsa` is
+//! the production provider; its differential test against a second implementation lives in
+//! dowiz-hub (`tests/mldsa_differential.rs`).
 //!
 //! The actor id convention here is `sha256(pk)` (R-MAINGOAL-A §1.1); dowiz-hub's adapter
 //! decides it for production and this crate never derives it.
 
 use super::keys::{Key, KeyOp, ALG_ML_DSA_65};
-use super::tests::{key_of, Dev};
+use super::tests::{key_of, sha256, Dev};
 use super::verify::{verify, Trust};
 use super::{Doc, DocError, Signer, Verifier};
 use crate::Store;
-use dowiz_core::pq::dsa::{keygen, sign_pure_bytes, verify_pure_bytes, MlDsa65Pk, MlDsa65Sk, PUBLICKEYBYTES, SIGNATUREBYTES};
-use dowiz_core::sha256_hw::sha256_hw as sha256;
+use fips204::ml_dsa_65::{self, PrivateKey, PublicKey, KG};
+use fips204::traits::{KeyGen as _, SerDes as _, Signer as _, Verifier as _};
 
 struct MlDsa {
-    pk: MlDsa65Pk,
-    sk: MlDsa65Sk,
+    pk: Vec<u8>,
+    sk: PrivateKey,
     id: [u8; 32],
 }
 impl MlDsa {
     fn from_seed(seed: [u8; 32]) -> Self {
-        let (pk, sk) = keygen(&seed);
-        let id = sha256(&pk.bytes);
+        let (pk, sk) = KG::keygen_from_seed(&seed);
+        let pk = pk.into_bytes().to_vec();
+        let id = sha256(&pk);
         MlDsa { pk, sk, id }
     }
 }
@@ -33,17 +36,23 @@ impl Signer for MlDsa {
         ALG_ML_DSA_65
     }
     fn public_key(&self) -> Vec<u8> {
-        self.pk.bytes.clone()
+        self.pk.clone()
     }
     /// External pure ML-DSA, empty context (FORMAT §9.4), deterministic (`rnd` = 0^32).
     fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        sign_pure_bytes(&self.sk.bytes, msg, &[0u8; 32])
+        self.sk.try_sign_with_seed(&[0u8; 32], msg, b"").expect("ML-DSA-65 signing failed").to_vec()
     }
 }
 struct MlDsaVerifier;
 impl Verifier for MlDsaVerifier {
     fn verify(&self, alg: i64, pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
-        alg == ALG_ML_DSA_65 && pk.len() == PUBLICKEYBYTES && sig.len() == SIGNATUREBYTES && verify_pure_bytes(pk, msg, sig)
+        if alg != ALG_ML_DSA_65 {
+            return false;
+        }
+        let (Ok(pk), Ok(sig)) = (<[u8; ml_dsa_65::PK_LEN]>::try_from(pk), <&[u8; ml_dsa_65::SIG_LEN]>::try_from(sig)) else {
+            return false;
+        };
+        PublicKey::try_from_bytes(pk).is_ok_and(|pk| pk.verify(msg, sig, b""))
     }
 }
 

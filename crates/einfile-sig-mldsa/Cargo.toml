@@ -17,7 +17,7 @@ description = "ML-DSA-65 behind einfile-log's Signer and Verifier: external pure
 #   signature on the verify path, and its proofs stop short of `verify`; aws-lc-rs and mldsa-native,
 #   the best provenance but C, so no wasm32-unknown-unknown and the Worker links this; our own
 #   `dowiz_core::pq::dsa`, AGPL so a stranger cannot take it, no constant-time run, no zeroizing, no
-#   attempt limit: it stays as this crate's differential oracle in tests only.
+#   attempt limit: it stays as the differential oracle in dowiz-hub's tests only.
 # COST: fips204 has NO independent audit and neither has the fallback; this buys more test
 #   coverage and shared code with outside verifiers, not "audited". The format does not depend on
 #   the choice: FORMAT §9.4 is plain FIPS 204, so any of the above verifies it, and aws-lc-rs is
@@ -35,13 +35,11 @@ sha2 = { version = "0.10", default-features = false }
 
 [dev-dependencies]
 einfile-image = { path = "../einfile-image", version = "0.1.0" }
-# THE ORACLE, as in einfile-log: AGPL-3.0-or-later and DEV ONLY, never linked by a user of this crate.
-dowiz-core = { path = "../dowiz-core" }
+# THE ORACLE (`dowiz_core::pq::dsa`) runs in dowiz-hub's tests/mldsa_differential.rs, not here:
+# this crate leaves for the public einfile repo and keeps no AGPL dev-dependency.
 serde_json = "1"
 
 [profile.dev.package.fips204]
-opt-level = 2
-[profile.dev.package.dowiz-core]
 opt-level = 2
 [profile.dev.package.sha3]
 opt-level = 2

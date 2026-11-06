@@ -5,7 +5,7 @@
 use super::super::{id_message, Ids, Verifier};
 use super::tests::mth;
 use crate::{Record, FLAG_SHA256};
-use dowiz_core::sha256_hw::sha256_hw as sha256;
+use crate::doc::tests::sha256;
 
 pub(super) const NONCE: usize = 16;
 pub(super) const ERASED_NONCE: [u8; NONCE] = [b'0'; NONCE];

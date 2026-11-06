@@ -23,7 +23,7 @@ use super::super::write::{stage_doc, Refs};
 use super::super::{forgotten_body, Doc, DocError, Ids, Verifier};
 use super::fixture_ids::{legacy_id, sha_id, Blind, FixIds, ERASED_NONCE, ORDER_KIND, TOMB_BIT};
 use crate::{EvLog, Record, Store, FLAG_SHA256};
-use dowiz_core::sha256_hw::sha256_hw as sha256;
+use crate::doc::tests::sha256;
 
 pub(super) fn owner() -> ToySigner {
     ToySigner { id: [0xA1; 32] }

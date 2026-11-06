@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! `fips204` against `dowiz_core::pq::dsa`, two implementations with no code in common: same keys
 //! from one seed, same signature bytes for one message, and either accepts what the other
-//! makes and refuses what the other refuses. `dsa` is a dev-dependency only.
+//! makes and refuses what the other refuses. Moved here from einfile-sig-mldsa so the public
+//! MIT crate needs no AGPL dev-dependency (einfile split, B1); the hub links both sides.
 
 use einfile_log::doc::{Signer as _, Verifier as _, ALG_ML_DSA_65};
 use einfile_sig_mldsa::{actor_id, DeviceKey, MlDsa65, PK_BYTES, SEED_BYTES, SIG_BYTES};
