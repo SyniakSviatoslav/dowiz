@@ -35,6 +35,8 @@ sha2 = { version = "0.10", default-features = false }
 
 [dev-dependencies]
 einfile-image = { path = "../einfile-image", version = "0.1.0" }
+# `Sha256Ids::tree_root` against the facade's RFC 9162 tree (tests/sha256_ids.rs). MIT OR Apache-2.0.
+einstore = { path = "../einstore" }
 # THE ORACLE (`dowiz_core::pq::dsa`) runs in dowiz-hub's tests/mldsa_differential.rs, not here:
 # this crate leaves for the public einfile repo and keeps no AGPL dev-dependency.
 serde_json = "1"

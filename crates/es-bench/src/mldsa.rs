@@ -1,40 +1,11 @@
 //! THE PROVIDER: a real ML-DSA-65 (FIPS 204) behind `doc::Signer` / `doc::Verifier`, from
 //! einfile-sig-mldsa (feature `mldsa`), the provider dowiz-hub runs. Nothing else in this crate names it. The ids are sha256 and
 //! the actor id is sha256(public key), the rules of the hub's adapter and of `tools/verify`.
-use einstore::evlog::doc::{id_message, Ids, Signer, Verifier};
-use einstore::evlog::{Record, FLAG_SHA256};
-use einstore::merkle;
-use einstore::nodekey::sha256;
+use einstore::evlog::doc::{Signer, Verifier};
 use einfile_sig_mldsa::{DeviceKey, MlDsa65};
 
-pub const NONCE_LEN: usize = 16;
-/// FORMAT §9.4: the mark, the high bit of the byte behind the nonce.
-const TOMBSTONE_BIT: u8 = 0x80;
-
-pub struct Sha256Ids;
-
-impl Ids for Sha256Ids {
-    fn chained(&self, r: &Record) -> [u8; 32] {
-        sha256(&id_message(r.flags, &r.actor_pubkey, r.actor_seq, &r.prev, &r.payload))
-    }
-    fn redacted(&self, flags: i64, payload: &[u8]) -> bool {
-        self.body(flags, payload).first().is_some_and(|k| k & TOMBSTONE_BIT != 0)
-    }
-    fn body<'a>(&self, flags: i64, payload: &'a [u8]) -> &'a [u8] {
-        if flags & FLAG_SHA256 != 0 {
-            payload.get(NONCE_LEN..).unwrap_or(&[])
-        } else {
-            payload
-        }
-    }
-    fn hash(&self, bytes: &[u8]) -> Option<[u8; 32]> {
-        Some(sha256(bytes))
-    }
-    fn tree_root(&self, ids: &[[u8; 32]]) -> Option<[u8; 32]> {
-        let leaves: Vec<_> = ids.iter().map(|id| merkle::leaf_hash(id)).collect();
-        Some(merkle::root(&leaves))
-    }
-}
+/// The id scheme: the provider's ready-made one (FORMAT §9.4 nonce and tombstone, RFC 9162 segments).
+pub use einfile_sig_mldsa::Sha256Ids;
 
 /// One device's key. Deterministic signing (FIPS 204 `rnd` = 0^32) keeps a run's bytes repeatable.
 pub struct MlDsa(DeviceKey);

@@ -58,6 +58,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "einfile-io"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+ "einfile-kv",
+]
+
+[[package]]
+name = "einfile-kv"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+]
+
+[[package]]
 name = "einfile-log"
 version = "0.1.0"
 dependencies = [
@@ -70,9 +85,20 @@ version = "0.1.0"
 dependencies = [
  "einfile-image",
  "einfile-log",
+ "einstore",
  "fips204",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "einstore"
+version = "0.1.0"
+dependencies = [
+ "einfile-image",
+ "einfile-io",
+ "einfile-kv",
+ "einfile-log",
 ]
 
 [[package]]

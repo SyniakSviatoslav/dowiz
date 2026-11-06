@@ -4,17 +4,9 @@
 //! README says a user with no dowiz code can do.
 
 use einfile_image::Store;
-use einfile_log::doc::{id_message, verify, Doc, Ids, Signer as _, Trust};
+use einfile_log::doc::{id_message, verify, Doc, Signer as _, Trust};
 use einfile_log::{Record, FLAG_SHA256};
-use einfile_sig_mldsa::{actor_id, DeviceKey, MlDsa65};
-
-/// A stranger's id scheme: sha256 over `id_message`.
-struct Sha;
-impl Ids for Sha {
-    fn chained(&self, r: &Record) -> [u8; 32] {
-        actor_id(&id_message(r.flags, &r.actor_pubkey, r.actor_seq, &r.prev, &r.payload))
-    }
-}
+use einfile_sig_mldsa::{actor_id, DeviceKey, MlDsa65, Sha256Ids};
 
 fn sealed(key: &DeviceKey, n: u64) -> Store {
     let mut st = Store::create_bytes(1 << 20).unwrap();
@@ -34,7 +26,7 @@ fn sealed(key: &DeviceKey, n: u64) -> Store {
 fn a_stranger_seals_and_checks_with_no_dowiz_code() {
     let key = DeviceKey::from_seed(&[5u8; 32]);
     let mut st = sealed(&key, 3);
-    let rep = verify(&st, &Sha, &MlDsa65, Trust::Genesis).unwrap();
+    let rep = verify(&st, &Sha256Ids, &MlDsa65, Trust::Genesis).unwrap();
     assert_eq!((rep.counters.chained, rep.counters.broken), (3, 0), "{rep:?}");
     assert_eq!((rep.counters.seals_ok, rep.counters.seals_bad), (3, 0), "{rep:?}");
     assert!(rep.holds(), "{rep:?}");
@@ -42,7 +34,7 @@ fn a_stranger_seals_and_checks_with_no_dowiz_code() {
     let heads = Doc::open(&st).unwrap().heads.unwrap();
     st.put_cell(heads, 1 + 5, st.get(heads, 1 + 5) ^ 1);
     st.seal(heads);
-    let rep = verify(&st, &Sha, &MlDsa65, Trust::Genesis).unwrap();
+    let rep = verify(&st, &Sha256Ids, &MlDsa65, Trust::Genesis).unwrap();
     assert_eq!(rep.counters.seals_bad, 1, "a changed head tip under a real signature: {rep:?}");
     assert!(!rep.holds(), "{rep:?}");
 }
