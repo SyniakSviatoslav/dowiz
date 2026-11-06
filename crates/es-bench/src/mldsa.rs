@@ -1,11 +1,11 @@
 //! THE PROVIDER: a real ML-DSA-65 (FIPS 204) behind `doc::Signer` / `doc::Verifier`, from
-//! dowiz-core (AGPL, feature `mldsa`). Nothing else in this crate names it. The ids are sha256 and
+//! einfile-sig-mldsa (feature `mldsa`), the provider dowiz-hub runs. Nothing else in this crate names it. The ids are sha256 and
 //! the actor id is sha256(public key), the rules of the hub's adapter and of `tools/verify`.
-use einstore::evlog::doc::{id_message, Ids, Signer, Verifier, ALG_ML_DSA_65};
+use einstore::evlog::doc::{id_message, Ids, Signer, Verifier};
 use einstore::evlog::{Record, FLAG_SHA256};
 use einstore::merkle;
 use einstore::nodekey::sha256;
-use dowiz_core::pq::dsa::{keygen, sign_pure_bytes, verify_pure_bytes, MlDsa65Pk, MlDsa65Sk, PUBLICKEYBYTES, SIGNATUREBYTES};
+use einfile_sig_mldsa::{DeviceKey, MlDsa65};
 
 pub const NONCE_LEN: usize = 16;
 /// FORMAT §9.4: the mark, the high bit of the byte behind the nonce.
@@ -37,32 +37,26 @@ impl Ids for Sha256Ids {
 }
 
 /// One device's key. Deterministic signing (FIPS 204 `rnd` = 0^32) keeps a run's bytes repeatable.
-pub struct MlDsa {
-    pk: MlDsa65Pk,
-    sk: MlDsa65Sk,
-    id: [u8; 32],
-}
+pub struct MlDsa(DeviceKey);
 
 impl MlDsa {
     pub fn from_seed(seed: [u8; 32]) -> Self {
-        let (pk, sk) = keygen(&seed);
-        let id = sha256(&pk.bytes);
-        MlDsa { pk, sk, id }
+        MlDsa(DeviceKey::from_seed(&seed))
     }
 }
 
 impl Signer for MlDsa {
     fn actor_id(&self) -> [u8; 32] {
-        self.id
+        self.0.actor_id()
     }
     fn alg(&self) -> i64 {
-        ALG_ML_DSA_65
+        self.0.alg()
     }
     fn public_key(&self) -> Vec<u8> {
-        self.pk.bytes.clone()
+        self.0.public_key().to_vec()
     }
     fn sign(&self, msg: &[u8]) -> Vec<u8> {
-        sign_pure_bytes(&self.sk.bytes, msg, &[0u8; 32])
+        self.0.sign(msg)
     }
 }
 
@@ -71,10 +65,10 @@ pub struct MlDsaVerifier;
 
 impl Verifier for MlDsaVerifier {
     fn verify(&self, alg: i64, pk: &[u8], msg: &[u8], sig: &[u8]) -> bool {
-        alg == ALG_ML_DSA_65 && pk.len() == PUBLICKEYBYTES && sig.len() == SIGNATUREBYTES && verify_pure_bytes(pk, msg, sig)
+        MlDsa65.verify(alg, pk, msg, sig)
     }
     fn actor_of(&self, pk: &[u8]) -> Option<[u8; 32]> {
-        Some(sha256(pk))
+        MlDsa65.actor_of(pk)
     }
 }
 
