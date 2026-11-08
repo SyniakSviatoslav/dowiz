@@ -107,6 +107,9 @@ for p in e2e/gates/*.prove.mjs; do run "$(basename "$p" .mjs)" node "$p"; done
 # 2026-10-08: the same command as CI's browser-units job. No gate ran these, so a red one (the storefront
 # anchor list, 42 lines stale) sat on main for days while every local run-all was green.
 run browser-units sh -c "node --test \$(find workers/api/public -name '*.test.mjs' | sort)"
+# 2026-11-08: the same command as the Evals nightly harness step. No gate ran these, so a stale build-command
+# pin kept the nightly red from 11-04 while every local run-all was green.
+run evals-harness sh -c "node --test tools/evals/*.test.mjs tools/evals/collect/*.test.mjs workers/watch/test/*.test.mjs"
 
 if [ $CARGO = 1 ]; then
   run dowiz-hub-wasm sh crates/dowiz-hub-wasm/gate.sh

@@ -4,7 +4,7 @@
 #   bash tools/ci/local-qa-hub.sh          # exit 0 GREEN, else the exit code of the failing step
 #
 # WHAT IT DOES, IN ORDER (each step prints its name and its seconds):
-#   1 BUILD    worker-build --release + scripts/strip-wasm.mjs in workers/api (the wrangler.toml [build] command).
+#   1 BUILD    worker-build --release + strip-wasm.mjs + harden-shim.mjs in workers/api (the wrangler.toml [build] command).
 #              The repo pins rustc 1.96.1 (rust-toolchain.toml); cargo from ~/.cargo/bin goes through rustup.
 #   2 SECRETS  a RANDOM BOOTSTRAP_SECRET (openssl rand) and a random owner password, generated per run. They go
 #              into workers/api/.dev.vars (wrangler's local secrets file, deleted on exit) and into a 0600 owner
@@ -70,7 +70,7 @@ fi
 
 # ── 1 BUILD ────────────────────────────────────────────────────────────────
 say "1 build the Worker (worker-build --release, pinned toolchain via rust-toolchain.toml)"
-BUILD='cd "$1" && worker-build --release && node scripts/strip-wasm.mjs build/index_bg.wasm --keep build/unstripped'
+BUILD='cd "$1" && worker-build --release && node scripts/strip-wasm.mjs build/index_bg.wasm --keep build/unstripped && node scripts/harden-shim.mjs build/index.js'
 if [ -n "${QA_HUB_NO_SLOT:-}" ] || [ ! -f "$ROOT/bebop-lang/tools/slot.sh" ]; then
   bash -c "$BUILD" _ "$API" > "$WORK/build.log" 2>&1
 else

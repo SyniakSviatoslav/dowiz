@@ -36,6 +36,9 @@ test('the raw bundle baseline is a real build, not a placeholder', () => {
 test('wrangler builds with the post-glue strip and keeps the unstripped copy', () => {
   const toml = fs.readFileSync(path.join(HERE, '../../workers/api/wrangler.toml'), 'utf8');
   const cmd = toml.match(/^\[build\][\s\S]*?^command\s*=\s*"([^"]*)"/m)?.[1] ?? '';
-  assert.match(cmd, /^worker-build --release && node scripts\/strip-wasm\.mjs build\/index_bg\.wasm --keep build\/unstripped$/);
+  // The strip must follow the glue directly; later steps only touch the JS shim (harden-shim, 4a51a5db).
+  assert.match(cmd, /^worker-build --release && node scripts\/strip-wasm\.mjs build\/index_bg\.wasm --keep build\/unstripped( && node scripts\/\S+ build\/index\.js)*$/);
+  const qaHub = fs.readFileSync(path.join(HERE, '../ci/local-qa-hub.sh'), 'utf8');
+  assert.ok(qaHub.includes(`BUILD='cd "$1" && ${cmd}'`), 'tools/ci/local-qa-hub.sh must build with the same command as wrangler.toml');
   assert.equal(Number(base['wasm.section.name']), 0, 'a stripped bundle has no name section');
 });
