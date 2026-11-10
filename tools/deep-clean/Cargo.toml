@@ -7,7 +7,7 @@ publish = false
 # Native Rust DEEP-CLEAN (replaces deep-clean.py/bash). No bash logic.
 # Offline-buildable: rusqlite + libsqlite3-sys are in the cargo cache.
 [dependencies]
-rusqlite = { version = "0.31", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 
 [[bin]]
 name = "deep-clean"

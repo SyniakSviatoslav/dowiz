@@ -1,4 +1,4 @@
-//! SQLite adapter (rusqlite 0.32.1, bundled). `CREATE TABLE kv(k BLOB PRIMARY KEY, v BLOB)
+//! SQLite adapter (rusqlite 0.41.1, bundled). `CREATE TABLE kv(k BLOB PRIMARY KEY, v BLOB)
 //! WITHOUT ROWID`, WAL, `locking_mode=EXCLUSIVE` (file locks taken once: under proot every
 //! fcntl costs ~140 us, R-STORE-VS-SQL §2). Durable = `synchronous=FULL`, normal = `NORMAL`,
 //! unsynced = `OFF`.

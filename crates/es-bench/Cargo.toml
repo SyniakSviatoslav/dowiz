@@ -29,7 +29,7 @@ libc = "0.2"
 einfile-sig-mldsa = { path = "../einfile-sig-mldsa", optional = true }
 redb = { version = "=4.4.0", optional = true }
 heed = { version = "=0.22.1", optional = true }
-rusqlite = { version = "=0.32.1", features = ["bundled"], optional = true }
+rusqlite = { version = "=0.41.1", features = ["bundled"], optional = true }
 
 [profile.release]
 opt-level = 3
