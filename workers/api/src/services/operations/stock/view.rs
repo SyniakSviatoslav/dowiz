@@ -95,7 +95,8 @@ pub fn extras(id: &str, basis: i64, j: &Journal, today: i64) -> Value {
         .map(|l| {
             let days_left = l.expiry.map(|d| day_number(d) - day_number(today));
             json!({ "code": l.code, "left": l.left, "received": l.received, "expiry": l.expiry.map(show_day),
-                    "daysLeft": days_left, "supplier": l.supplier, "doc": l.doc, "at": l.at })
+                    "daysLeft": days_left, "supplier": l.supplier, "doc": l.doc, "at": l.at,
+                    "perBasis": l.unit_cost.zip(l.per).and_then(|(c, p)| per_basis(c, p, basis)) })
         })
         .collect();
     let left = |max: i64| lots.iter().filter(|l| l["daysLeft"].as_i64().is_some_and(|d| d <= max)).count();

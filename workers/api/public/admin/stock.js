@@ -25,6 +25,7 @@ import { openCard, openSupply, openMove, openPrep } from '/admin/ingredients.js'
 import { KINDS, matches, alertsMarkup, rowMarkup, noRecipeMarkup } from '/admin/ingredients-view.js';
 import { openCount, openWaste, openDelivery } from '/admin/ingredients-count.js';
 import * as N from '/admin/nom-logic.js';
+import { stockSearch } from '/admin/supply-resolve.js';
 import { openKitchen, ensureCss } from '/admin/kitchen-analytics.js';
 import { openPrepList } from '/admin/prep-list.js';
 import { drawHealth } from '/admin/stock-health.js';
@@ -153,7 +154,8 @@ function drawList(host){
   const row = sel.on ? sup => pickRow(sup.id, sup.name || sup.id, esc(`${sup.category || ''} · ${P.isPrep(sup) ? t('kind_prep') : `${sup.onHand ?? 0} ${sup.unit || ''}`}`), sel.ids.has(sup.id))
     : sup => (P.isPrep(sup) ? prepRowMarkup(withShelf(sup.id), { money, t, del: owner }) : rowMarkup(sup, { money, t, warnDays: stock.expiryWarnDays, del: owner }));
   const q = norm(view.q).trim();
-  let list = all.filter(s => (view.kind === 'all' || s.kind === view.kind) && (!q || norm(`${s.name} ${s.category} ${s.id} ${s.code || ''} ${s.barcode || ''}`).includes(q)) && matches(s, view.flag));
+  const hit = stockSearch(view.q);
+  let list = all.filter(s => (view.kind === 'all' || s.kind === view.kind) && (!q || hit(s)) && matches(s, view.flag));
   if (view.sort === 'name') list = [...list].sort((a, b) => String(a.name).localeCompare(String(b.name), lang));
   else if (view.sort === 'category') list = [...list].sort((a, b) => String(a.category).localeCompare(String(b.category), lang) || String(a.name).localeCompare(String(b.name), lang));
   else list = [...list].sort((a, b) => (a.available || 0) - (b.available || 0));

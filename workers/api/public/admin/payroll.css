@@ -1,0 +1,17 @@
+/* The payroll tab (admin/payroll.js): the month as one table that scrolls sideways under a fixed first column;
+   the month's hours and pay sit beside the name, before the days. */
+.pay-month{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0}
+.pay-title{flex:1;text-align:center}
+.pay-title::first-letter{text-transform:uppercase}
+.pay-scroll{overflow-x:auto;margin-top:12px;border:1px solid var(--line,#ddd);border-radius:12px;-webkit-overflow-scrolling:touch}
+.pay-grid{border-collapse:separate;border-spacing:0;width:100%;font-variant-numeric:tabular-nums}
+.pay-grid th,.pay-grid td{padding:4px 6px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--line,#ddd)}
+.pay-grid thead th{position:sticky;top:0;background:var(--surface,#fff);font-weight:600}
+.pay-grid tbody th,.pay-grid tfoot th,.pay-grid thead th:first-child{position:sticky;left:0;background:var(--surface,#fff);z-index:1}
+.pay-grid .pay-num{text-align:right}
+.pay-grid tfoot td,.pay-grid tfoot th{border-bottom:0;font-weight:600}
+.pay-grid tr.off .pay-name{opacity:.55}
+.pay-name{display:block;max-width:34vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left;padding-inline:6px}
+.pay-grid .pay-sum{font-weight:600}
+.pay-cell{padding-inline:8px}
+.pay-preview{margin:8px 0 0}

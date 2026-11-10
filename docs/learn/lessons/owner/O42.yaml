@@ -1,0 +1,54 @@
+# Lesson O42 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# W-FINANCE: taxes, other expenses and the month's net (admin/finance.js).
+id: O42
+role: owner
+module: finance
+order: 58
+covers: [finance]
+title:
+  sq: "Paratë e muajit"
+  en: "The month's money"
+  uk: "Гроші за місяць"
+  ru: "Деньги за месяц"
+goal:
+  sq: "Shkruani taksat dhe shpenzimet; shihni hyrjet, daljet dhe fitimin."
+  en: "Enter taxes and expenses; see what came in, went out and stayed."
+  uk: "Вносьте податки й витрати; бачите плюс, мінус і чисті."
+  ru: "Вносите налоги и расходы; видите плюс, минус и чистые."
+steps:
+  - key: 1
+    anchor: more.tile.finance
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.finance"]'
+    title:
+      sq: "Paratë"
+      en: "Money"
+      uk: "Гроші"
+      ru: "Деньги"
+    caption:
+      sq: "Hyrjet, daljet dhe fitimi i muajit."
+      en: "The month's plus, minus and net."
+      uk: "Плюс, мінус і чисті за місяць."
+      ru: "Плюс, минус и чистые за месяц."
+  - key: 2
+    anchor: finance.month
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="finance.month"]'
+    title:
+      sq: "Muajt e kaluar"
+      en: "Past months"
+      uk: "Минулі місяці"
+      ru: "Прошлые месяцы"
+    caption:
+      sq: "Shfletoni muajt me shigjetat."
+      en: "Step through months with the arrows."
+      uk: "Гортайте місяці стрілками."
+      ru: "Листайте месяцы стрелками."

@@ -21,6 +21,8 @@
 // where it does not is flagged `mismatch` (a misread digit is far likelier
 // than a supplier's arithmetic error, and the owner must look).
 
+import { fold, nearWord } from './supply-resolve.js';
+
 /// The units an invoice line may carry, as the console's base units scale them.
 /// `copë` (piece) is Albanian; OCR often drops the diacritic.
 export const UNITS = {
@@ -157,19 +159,20 @@ export function parseText(text){
   return { ...header(raw), lines: raw.map(parseLine).filter(Boolean) };
 }
 
-const fold = s => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
-const wordsOf = s => fold(s).split(/[^a-z0-9а-яіїєґ]+/).filter(w => w.length > 2);
+const wordsOf = s => fold(s).split(' ').filter(w => w.length > 2 && !(w[0] >= '0' && w[0] <= '9'));
 
 /// Which supply a line is: the supplier's remembered alias first, then the
 /// supply whose name shares the most words with the line (a SUGGESTION the
 /// owner confirms), else none. `known` is `supplierAliases[card].lines`.
+/// Words are compared by the names' fold (`supply-resolve.js`), so the
+/// supplier's spelling or ending of a word still finds the venue's.
 export function match(line, known, supplies){
   const hit = known?.[line.key];
   if (hit && (supplies || []).some(s => s.id === hit)) return { item: hit, by: 'alias' };
-  const mine = new Set(wordsOf(line.text));
+  const mine = wordsOf(line.text);
   let best = null, bestN = 0;
   for (const s of supplies || []) {
-    const n = wordsOf(`${s.name || ''} ${s.id}`).filter(w => mine.has(w)).length;
+    const n = wordsOf(`${s.name || ''} ${s.id}`).filter(w => mine.some(m => nearWord(w, m))).length;
     if (n > bestN) { best = s.id; bestN = n; }
   }
   return best ? { item: best, by: 'name' } : { item: '', by: '' };

@@ -12,7 +12,12 @@ const decode = s => s.replace(/&(amp|lt|gt|quot|#39|apos);/g, (_, e) => ENT[e]);
 const enc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 class Node {
-  constructor(doc){ this.ownerDocument = doc; this.parentNode = null; this.childNodes = []; this._l = {}; }
+  // Back references are not enumerable: a failed assertion prints the node, and
+  // followed they make the tree a graph that fills the heap on a whole sheet.
+  constructor(doc){
+    Object.defineProperties(this, { ownerDocument: { value: doc, writable: true, configurable: true }, parentNode: { value: null, writable: true, configurable: true } });
+    this.childNodes = []; this._l = {};
+  }
   appendChild(n){ if (n.parentNode) n.remove(); n.parentNode = this; this.childNodes.push(n); return n; }
   remove(){ const p = this.parentNode; if (p) { p.childNodes = p.childNodes.filter(c => c !== this); this.parentNode = null; } }
   contains(n){ for (let x = n; x; x = x.parentNode) if (x === this) return true; return false; }

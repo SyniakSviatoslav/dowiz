@@ -129,6 +129,13 @@ pub const STORES: &[Store] = &[
         retention: Retention::Latest,
         erase: Eraser::Missing("P7"),
         export: NO_EXPORT },
+    // The hours and hourly rates an owner enters; kept with the venue's accounts.
+    Store { image: "payroll", kinds: &["entry", "rate"], home: Venue,
+        holds: &[StaffId, Payment, Note], subjects: &[Staff],
+        purpose: P::Accounting, basis: Basis::LegalObligation,
+        retention: Retention::NoLimitYet("payroll records follow the venue's accounting retention; not pruned"),
+        erase: Eraser::Retain("payroll records are accounts the venue must keep"),
+        export: NO_EXPORT },
     // The venue's own error and audit log (who revealed which pseudonym).
     Store { image: "audit", kinds: &["error"], home: Venue,
         holds: &[StaffId, Session], subjects: &[Staff, Customer],
@@ -224,6 +231,14 @@ pub const STORES: &[Store] = &[
         retention: Retention::Latest,
         erase: Eraser::NotPersonal("delivery-rail health counters"),
         export: Exporter::NotPersonal },
+    // Taxes and other expenses the owner typed by hand; the free text names a purchase and may
+    // name whoever was paid: a supplier, or one of the staff.
+    Store { image: "finance", kinds: &["exp"], home: Venue,
+        holds: &[Name], subjects: &[Supplier, Staff],
+        purpose: P::Operations, basis: Basis::LegitimateInterest,
+        retention: Retention::NoLimitYet("the venue's own bookkeeping: entries stay until the owner deletes them"),
+        erase: Eraser::Retain("the owner's own expense list; free text the owner typed, no customer record"),
+        export: NO_EXPORT },
     // W-SNN: the sheaf network's shadow -- ONE aggregate per venue (comparisons, agreements, model id).
     Store { image: "snn", kinds: &["tally"], home: Venue,
         holds: &[], subjects: &[],

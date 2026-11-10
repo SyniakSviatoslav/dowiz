@@ -17,6 +17,7 @@ export const CLEAN_MAX = PM, COOK_MAX = 5 * PM;
 export const basisOf = unit => unit === 'unit' ? 1 : 100;
 
 import { canonQty } from './qty-adapter.js';
+import { parseMinor } from './wire-logic.js';
 
 const UNIT_SCALE = { g: 1, ml: 1, kg: 1000, l: 1000 };
 
@@ -159,6 +160,11 @@ export function priceBody(unit, priceTyped, mode){
   if (mode === 'total') return { total: priceTyped };
   return { unitCost: priceTyped, per: unit === 'unit' ? 1 : 1000 };
 }
+
+/// A typed price in MINOR units of a currency with `decimals` minor digits:
+/// "1 500" lek (0) is 1500, "12,50" (2) is 1250. Exact digits, never a float;
+/// finer than the currency's smallest coin, or not a number, is null.
+export const priceMinor = parseMinor;
 
 /// Measured yield of a prep, per mille of what went onto the board.
 export const yieldPm = (qty, out) => (qty > 0 && out != null ? Math.trunc(out * PM / qty) : null);

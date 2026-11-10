@@ -8,8 +8,9 @@
 // A transfer never adds or removes stock: the hub refuses more than is there.
 
 import { $, $$, esc, t, api, post, sheet, closeSheet, busy, toast } from '/admin/core.js';
-import { btn, field, select, chips, press, empty, loading, pill } from '/admin/parts.js';
+import { btn, field, chips, press, empty, loading, pill } from '/admin/parts.js';
 import * as L from './stock-storages-logic.js';
+import * as F from '/admin/supply-resolve-field.js';
 
 const fail = e => toast(String(e.message || e));
 
@@ -67,21 +68,23 @@ export function openMove(stock, from = ''){
   const sups = (stock.supplies || []).filter(s => s.kind !== 'prep'), live = L.open(stock.storages);
   const opts = live.map(s => ({ value: s.id, label: L.nameOf(s, t) }));
   sheet(`<p class="eyebrow" data-t="sto_tool"></p><h2 data-t="sto_move"></h2><p class="sheet-hint" data-t="sto_moveHint"></p>
-    ${select({ id: 'mvItem', key: 'sto_item', value: '', options: [{ value: '', key: 'inv_pick' }, ...sups.map(s => ({ value: s.id, label: s.name || s.id }))], tour: 'store.moveItem' })}
+    ${F.markup('mv', { labelKey: 'sto_item', tour: 'store.moveItem' })}
     <div class="inv-big">${field({ id: 'mvQty', key: 'inv_qty', hintKey: 'inv_qtyHint', inputmode: 'decimal', autocomplete: 'off', tour: 'store.moveQty' })}</div>
     <p class="ui-label" data-t="sto_from"></p>${chips({ values: opts, value: from, attr: 'mvf', tour: 'store.moveFrom' })}
     <p class="ui-label" data-t="sto_to"></p>${chips({ values: opts, value: '', attr: 'mvt', tour: 'store.moveTo' })}
     <p class="hint" id="mvHave"></p>
     <div class="btn-row">${btn({ id: 'mvGo', variant: 'primary', icon: 'check', key: 'save', tour: 'store.moveSave' })}</div>`, { name: 'storeMove' });
   let f = from, to = '';
-  const have = () => { const s = sups.find(x => x.id === $('#mvItem').value); $('#mvHave').textContent = s && f ? `${L.nameOf(live.find(x => x.id === f), t)}: ${L.levelText(s, f)} ${s.unit}` : ''; };
+  // The position is typed and found in any spelling; a transfer never makes a new one.
+  let item = null;
+  const have = () => { const s = item; $('#mvHave').textContent = s && f ? `${L.nameOf(live.find(x => x.id === f), t)}: ${L.levelText(s, f)} ${s.unit}` : ''; };
+  const pick = F.bind($('[data-sr="mv"]', $('#sheetIn')), { supplies: () => sups, allowNew: false, onChange: got => { item = got.state === 'ok' ? got.sup : null; have(); } });
   const moveId = L.newMoveId();
   for (const b of $$('[data-mvf]', $('#sheetIn'))) b.onclick = () => { f = b.dataset.mvf; press($$('[data-mvf]', $('#sheetIn')), b); have(); };
   for (const b of $$('[data-mvt]', $('#sheetIn'))) b.onclick = () => { to = b.dataset.mvt; press($$('[data-mvt]', $('#sheetIn')), b); };
-  $('#mvItem').onchange = have;
   $('#mvGo').onclick = async () => {
-    const item = $('#mvItem').value, unit = sups.find(s => s.id === item)?.unit || 'g';
-    const r = L.moveBody(item, $('#mvQty').value, unit, f, to, moveId);
+    pick.settle();
+    const r = L.moveBody(item?.id || '', $('#mvQty').value, item?.unit || 'g', f, to, moveId);
     if (r.error) return toast(t(r.error));
     try { await busy($('#mvGo'), () => post('/owner/stock/moved', r.body)); toast(t('sto_moved')); open(to); } catch (e) { fail(e); }
   };

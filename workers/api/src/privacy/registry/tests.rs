@@ -69,6 +69,8 @@ fn the_crates_image_constants_resolve_to_rows() {
         crate::channels::IMAGE_INBOX,
         crate::rail::IMAGE_RAILS,
         crate::services::customers::taste::snn::IMAGE_SNN,
+        crate::services::finance::IMAGE,
+        crate::services::operations::payroll::rules::IMAGE,
         crate::notify::push::subs::IMAGE_PUSH,
         crate::outbox::IMAGE_OUTBOX,
         crate::command::till::IMAGE_TILL,

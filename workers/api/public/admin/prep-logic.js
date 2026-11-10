@@ -12,6 +12,7 @@
 
 import { basisOf, costOf, priceOf, PM } from './ingredients-calc.js';
 import { parseMilli, wireQty, toMilli, MILLI } from './qty-adapter.js';
+import { finder } from './supply-resolve.js';
 
 /// The hub's own bounds (`dowiz_hub::prep`).
 export const LINES_MAX = 40, QTY_MAX = 100000, DEPTH_MAX = 6;
@@ -133,8 +134,8 @@ export function qty3(uq){
 /// The picker's list: raw items and OTHER semi-finished products matching
 /// `q`, not already on the card, not the card itself. Sorted by name.
 export function pickable(all, q, exclude = new Set(), self = null){
-  const needle = String(q || '').toLowerCase().trim();
+  const found = finder(q);
   return (all || [])
-    .filter(s => s.id !== self && !exclude.has(s.id) && (s.active == null || s.active) && (!needle || `${s.name} ${s.category || ''} ${s.id}`.toLowerCase().includes(needle)))
+    .filter(s => s.id !== self && !exclude.has(s.id) && (s.active == null || s.active) && found(s))
     .sort((a, b) => Number(isPrep(b)) - Number(isPrep(a)) || String(a.name).localeCompare(String(b.name)));
 }

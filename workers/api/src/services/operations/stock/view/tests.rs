@@ -34,6 +34,7 @@ fn a_supply_shows_its_lots_prices_yields_and_last_count() {
     assert_eq!(lots.iter().map(|l| (l["code"].as_str().unwrap(), l["left"].as_i64().unwrap(), l["daysLeft"].as_i64().unwrap())).collect::<Vec<_>>(),
                vec![("A", 900, -1), ("B", 1000, 1), ("C", 1000, 14)]);
     assert_eq!(lots[0]["expiry"], json!("2026-09-25"));
+    assert_eq!(lots.iter().map(|l| l["perBasis"].as_i64().unwrap()).collect::<Vec<_>>(), vec![300, 340, 320], "each lot at its own price");
     assert_eq!((x["expiring"].clone(), x["expired"].clone()), (json!(2), json!(1)));
     // Prices per 100 g: 300, 340, 320; the average is 320 per 100 g.
     let per: Vec<i64> = x["prices"].as_array().unwrap().iter().map(|p| p["perBasis"].as_i64().unwrap()).collect();

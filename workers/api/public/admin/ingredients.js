@@ -7,7 +7,10 @@
 // "максимально просто": big number fields in whole grams (1,5 kg is read as
 // 1500 g), chips instead of menus, the four actions as big buttons on the card.
 
-import { $, $$, esc, icon, t, post, withLoc, toast, sheet, closeSheet, busy, money, switchEl, confirm, day, clock } from '/admin/core.js';
+import { $, $$, esc, icon, t, post, withLoc, toast, sheet, closeSheet, busy, money, switchEl, confirm, day, clock, retranslate, S } from '/admin/core.js';
+import { decimalsOf } from '/lib/money.js';
+import * as R from '/admin/supply-resolve.js';
+import { openNew } from '/admin/supply-resolve-field.js';
 import { ui, k as key, btn, field, input, select, chips, press, pill, rowBtn, rowDiv } from '/admin/parts.js';
 import * as C from '/admin/ingredients-calc.js';
 import { KINDS, cardMarkup } from '/admin/ingredients-view.js';
@@ -73,7 +76,8 @@ async function adoptYield(sup, stage, pm, el, ctx){
 /// The supply as the old service knew it, plus its losses and shelf life.
 export function openSupply(sup, ctx, preset = {}){
   const kind = sup?.kind || preset.kind || KINDS[0][0], unit = sup?.unit || preset.unit || 'g';
-  const cats = [...new Set((ctx.data?.supplies || []).map(s => s.category).filter(Boolean))];
+  // The venue's own groups, each under one spelling (`supply-resolve.js`).
+  const cats = R.categoriesOf(ctx.data?.supplies);
   const pctOf = pm => (pm == null ? '' : String(pm / 10));
   sheet(`<p class="eyebrow" data-t="supplies"></p><h2 data-t="${sup ? 'edit' : 'addSupply'}"></h2><p class="sheet-hint" data-t="ap_h_supply"></p>
     ${field({ id: 's-name', key: 'name', value: sup?.name || '', autocomplete: 'off', tour: 'supply.name' })}
@@ -112,7 +116,7 @@ export function openSupply(sup, ctx, preset = {}){
   const num = v => { const s = String(v ?? '').trim(); if (!s) return null; const n = Number(s.replace(',', '.')); return Number.isFinite(n) ? n : null; };
   const read = async () => {
     const id = $('#s-id').value.trim().toLowerCase().replace(/\s+/g, '-'); if (!id) { toast(t('required')); return null; }
-    const body = { id, name: $('#s-name').value.trim() || id, unit: $('#s-unit').value, kind: k, category: $('#s-cat').value.trim() };
+    const body = { id, name: $('#s-name').value.trim() || id, unit: $('#s-unit').value, kind: k, category: R.canonCategory($('#s-cat').value, R.categoriesOf(ctx.data?.supplies)) };
     const low = num($('#s-low').value); if (low != null) body.lowAt = Math.round(low);
     if (isFood(k)) { for (const [f, kk] of [['s-kcal', 'kcalPer100'], ['s-prot', 'proteinPer100'], ['s-fat', 'fatPer100'], ['s-carb', 'carbsPer100']]) { const v = num($('#' + f).value); if (v != null) body[kk] = v; } body.nutritionConfirmed = $('#s-conf').checked; body.nutritionBasis = nb; }
     const cost = num($('#s-cost').value); if (cost != null) body.costPerBasis = Math.round(cost);
@@ -150,6 +154,7 @@ export function openMove(sup, first, ctx){
     <div id="mRecv">
       <p class="ui-label" data-t="inv_price"></p>${chips({ id: 'mMode', values: [{ value: 'per', label: perWord(sup.unit) }, { value: 'total', key: 'inv_total' }], value: 'per', attr: 'mode' })}
       ${field({ id: 'm-price', key: 'inv_price', inputmode: 'numeric', autocomplete: 'off' })}
+      <div id="mMore"></div><div class="btn-row">${btn({ id: 'mMoreGo', variant: 'ghost', icon: 'plus', key: 'inv_morePrice' })}</div>
       <div class="grid2"><div>${field({ id: 'm-sup', key: 'inv_supplier', value: sup.supplier || '', autocomplete: 'off', attrs: { list: 'supList' } })}<datalist id="supList">${sups.map(s => `<option value="${esc(s)}">`).join('')}</datalist></div>
         <div>${field({ id: 'm-doc', key: 'inv_doc', autocomplete: 'off' })}</div></div>
       <div class="grid2 pair"><div>${field({ id: 'm-lot', key: 'inv_lot', autocomplete: 'off' })}</div><div>${input({ id: 'm-exp', type: 'date', key: 'inv_expiry' })}</div></div>
@@ -172,40 +177,75 @@ export function openMove(sup, first, ctx){
   $('#mEdit').onclick = () => openSupply(sup, ctx);
   // W-NOM: one tap adds one pack to the quantity ("2 boxes" is two taps).
   for (const b of $$('[data-pack]', $('#sheetIn'))) b.onclick = () => { $('#m-qty').value = String(N.plusPack($('#m-qty').value, { qty: Number(b.dataset.pack) }, sup.unit)); };
+  // ONE POSITION AT SEVERAL PRICES: each "another price" is a quantity and a
+  // price of its own, written as its own record and its own lot.
+  let extras = 1, mainSaved = false, saving = false;
+  $('#mMoreGo').onclick = () => {
+    const k = ++extras;
+    $('#mMore').insertAdjacentHTML('beforeend', `<div class="grid2 pair" data-mp="${k}"><div>${field({ key: 'inv_qty', inputmode: 'decimal', autocomplete: 'off', attrs: { data: { mpq: '1' } } })}</div>
+      <div>${field({ key: 'inv_price', inputmode: 'numeric', autocomplete: 'off', attrs: { data: { mpp: '1' } } })}</div></div>`);
+    retranslate($('#mMore'));
+  };
   $('#mGo').onclick = async () => {
-    // W-QTYHUB H3: milli-units, exact (2,5 pieces is 2500); sent as the TEXT "2.5" (CONTRACT-QTY §1).
-    const m = C.milli($('#m-qty').value, sup.unit);
-    if (m == null && C.whyNot($('#m-qty').value, sup.unit) === 'tooFine') return toast(`${t('inv_wholeUnits')} (${sup.unit})`);
-    if (m == null || m < 0 || (kind !== 'stocktake' && m === 0)) return toast(t('required'));
-    const qty = C.showMilli(m);
-    let body = kind === 'stocktake' ? { item: sup.id, observed: qty } : { item: sup.id, qty };
-    if (kind === 'wasted') { body.reason = $('#m-reason').value.trim(); if (lot) body.lot = lot; }
-    if (kind === 'received') {
-      const price = C.amount($('#m-price').value, 'unit');
-      body = { ...body, ...C.priceBody(sup.unit, price, mode) };
-      for (const [f, kk] of [['m-sup', 'supplier'], ['m-doc', 'doc'], ['m-lot', 'lot'], ['m-exp', 'expiry'], ['m-treated', 'treated']]) { const v = $('#' + f).value.trim(); if (v) body[kk] = v; }
+    if (saving) return;
+    const recv = kind === 'received', paper = {};
+    if (recv) for (const [f, kk] of [['m-sup', 'supplier'], ['m-doc', 'doc'], ['m-lot', 'lot'], ['m-exp', 'expiry'], ['m-treated', 'treated']]) { const v = $('#' + f).value.trim(); if (v) paper[kk] = v; }
+    // What is typed: the big field (unless a failed save already wrote it), then every other price that is not blank.
+    const typed = [...(mainSaved && recv ? [] : [[1, $('#m-qty'), $('#m-price'), null]]),
+      ...(recv ? $$('[data-mp]', $('#mMore')).map(el => [Number(el.dataset.mp), $('[data-mpq]', el), $('[data-mpp]', el), el]).filter(x => x[1].value.trim() || x[2].value.trim()) : [])];
+    const bodies = [];
+    for (const [k, q, p, el] of typed) {
+      // W-QTYHUB H3: milli-units, exact (2,5 pieces is 2500); sent as the TEXT "2.5" (CONTRACT-QTY §1).
+      const m = C.milli(q.value, sup.unit);
+      if (m == null && C.whyNot(q.value, sup.unit) === 'tooFine') return toast(`${t('inv_wholeUnits')} (${sup.unit})`);
+      if (m == null || m < 0 || (kind !== 'stocktake' && m === 0)) { q.focus(); return toast(t('required')); }
+      const qty = C.showMilli(m);
+      let body = kind === 'stocktake' ? { item: sup.id, observed: qty } : { item: sup.id, qty };
+      if (kind === 'wasted') { body.reason = $('#m-reason').value.trim(); if (lot) body.lot = lot; }
+      // A price that does not read is refused: sent on, it would be a delivery with no price.
+      const price = recv ? C.priceMinor(p.value, decimalsOf(S.venue?.currencyCode || 'ALL')) : null;
+      if (recv && p.value.trim() && price == null) { p.focus(); return toast(t('inv_badPrice')); }
+      // One label, several prices: each price is its own lot, so each gets its own code.
+      if (recv) body = { ...body, ...C.priceBody(sup.unit, price, mode), ...paper, ...(paper.lot && k > 1 ? { lot: `${paper.lot}/${k}` } : {}) };
+      if (mst) body.store = mst;
+      bodies.push([body, el]);
     }
-    if (mst) body.store = mst;
+    // Nothing left to send is never reported as saved.
+    if (!bodies.length) return toast(t('required'));
+    const said = [];
+    saving = true;
     try {
-      const r = await busy($('#mGo'), () => post(`/owner/stock/${kind}`, body));
-      const line = (r.lines || [])[0] || {};
-      toast([t('saved'), line.value != null ? money(line.value) : '', line.drift != null ? `${t('inv_drift')} ${line.drift > 0 ? '+' : ''}${line.drift}` : ''].filter(Boolean).join(' · '));
+      await busy($('#mGo'), async () => {
+        for (const [body, el] of bodies) {
+          const r = await post(`/owner/stock/${kind}`, body);
+          // What is written leaves the form: a retry after a refusal cannot write it twice.
+          if (el) el.remove(); else if (recv) { mainSaved = true; $('#m-qty').disabled = true; $('#m-price').disabled = true; }
+          said.push((r?.lines || [])[0] || {});
+        }
+      });
+      const value = said.some(l => l.value != null) ? said.reduce((a, l) => a + (l.value || 0), 0) : null, drift = said[0]?.drift;
+      toast([t('saved'), value != null ? money(value) : '', drift != null ? `${t('inv_drift')} ${drift > 0 ? '+' : ''}${drift}` : ''].filter(Boolean).join(' · '));
       closeSheet(); ctx.reload();
-    } catch (e) { fail(e); }
+    } catch (e) { fail(e); if (said.length) ctx.reload(); }
+    finally { saving = false; }
   };
 }
 
-/// Choose an ingredient, then `then(sup)`.
+/// Choose an ingredient, then `then(sup)`. The search folds what is typed
+/// (`supply-resolve.js`), so another spelling of a name finds it; a name the
+/// venue has not got can be made a position on the spot.
 export function pickSupply(ctx, titleKey, then){
   const all = (ctx.data?.supplies || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name)));
   sheet(`<p class="eyebrow" data-t="${titleKey}"></p><h2 data-t="inv_pick"></h2>
     <div class="srch">${icon('search')}${ui.inputRow({ id: 'pkQ', type: 'search', label: key('search'), placeholder: key('search'), attrs: {} })}</div>
-    <div class="rows" id="pkList"></div><p class="hint" id="pkShown"></p>`, { name: 'pick' });
+    <div class="rows" id="pkList"></div><p class="hint" id="pkShown"></p><div class="btn-row" id="pkNew"></div>`, { name: 'pick' });
   const draw = () => {
-    const q = $('#pkQ').value.toLowerCase().trim();
-    const hit = all.filter(s => !q || `${s.name} ${s.category}`.toLowerCase().includes(q)), shown = hit.slice(0, BOOK_MAX);
+    const q = $('#pkQ').value.trim();
+    const hit = all.filter(R.finder(q)), shown = hit.slice(0, BOOK_MAX);
     $('#pkList').innerHTML = shown.map(s => rowBtn({ title: s.name, sub: esc(`${s.category || ''} · ${C.showMilli(C.levelMilli(s, 'onHand'))} ${s.unit}`), data: { pk: s.id } })).join('');
     $('#pkShown').textContent = hit.length > shown.length ? t('rc_shown').replace('{n}', shown.length).replace('{total}', hit.length) : '';
+    $('#pkNew').innerHTML = R.fold(q) && !R.resolve(q, all).match ? btn({ id: 'pkNewGo', icon: 'plus', label: t('sr_addNew').replace('{name}', q) }) : '';
+    const nw = $('#pkNewGo'); if (nw) nw.onclick = () => openNew(ctx, q, then);
   };
   draw();
   $('#pkQ').oninput = draw;

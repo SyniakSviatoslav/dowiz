@@ -103,3 +103,89 @@ fn a_shelf_drawn_to_zero_keeps_its_last_cost() {
     assert_eq!(log.cost_book().wac("rice", KG), Some(1000));
     assert_eq!(StockLog::create_sized(64 * 1024).unwrap().cost_book().wac("rice", KG), None, "twin: never priced");
 }
+
+fn paper(cost: i64, at: i64, lot: Option<&str>) -> Meta {
+    Meta { unit_cost: Some(cost), per: Some(KG), supplier: Some("Agro".into()), doc: Some("F-9".into()), at: Some(at), lot: lot.map(str::to_string), ..Meta::default() }
+}
+fn waste(qty: Qty) -> StockEvent {
+    StockEvent::Wasted { item: "rice".into(), qty, reason: crate::stock::WasteReason::Spoiled, by: "p1".into() }
+}
+/// `(code, left, unit_cost, at)` of every open lot of rice, in draw order.
+fn lots(log: &StockLog) -> Vec<(String, Qty, Option<i64>, Option<i64>)> {
+    log.journal().unwrap().lots.of("rice").iter().map(|l| (l.code.clone(), l.left, l.unit_cost, l.at)).collect()
+}
+
+/// ONE POSITION AT TWO PRICES ON ONE PAPER: 10 kg at 500 and 5 kg at 600 per
+/// kg. Two records, two lots, one average; what the paper cost is the sum of
+/// the two rows, and writing all of it off gives the same money back.
+#[test]
+fn one_position_at_two_prices_averages_and_every_number_adds_up() {
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    log.receive_with("rice", 10 * KG, &paper(500, 1, None)).unwrap();
+    log.receive_with("rice", 5 * KG, &paper(600, 1, None)).unwrap();
+    let j = log.journal().unwrap();
+    // (10000 x 500 + 5000 x 600) / 15000 = 533.33 per kg.
+    assert_eq!(j.book.wac("rice", KG), Some(533));
+    assert_eq!(j.book.wac("rice", 100), Some(53), "the list's price per 100 g");
+    let bought: Vec<Option<i64>> = j.entries.iter().map(|e| e.value).collect();
+    assert_eq!(bought, vec![Some(5000), Some(3000)], "each row is what its line of the paper cost");
+    assert_eq!(bought.iter().flatten().sum::<i64>(), 8000, "the purchases total a report reads");
+    assert_eq!(lots(&log), vec![("#0".into(), 10 * KG, Some(500), Some(1)), ("#1".into(), 5 * KG, Some(600), Some(1))], "two lots, each with its own price");
+
+    // A later write-off of 3 kg: 3000 x 533.333 = 1599.999, which is 1600.
+    log.append(&waste(3 * KG)).unwrap();
+    log.append(&waste(12 * KG)).unwrap();
+    let j = log.journal().unwrap();
+    assert_eq!((j.entries[2].value, j.entries[3].value), (Some(1600), Some(6400)));
+    assert_eq!(j.entries[2].value.unwrap() + j.entries[3].value.unwrap(), 8000, "all of it written off is all that was paid");
+    // Twin: one price is that price, with nothing to round.
+    let mut one = StockLog::create_sized(64 * 1024).unwrap();
+    one.receive_with("rice", 15 * KG, &paper(500, 1, None)).unwrap();
+    one.append(&waste(3 * KG)).unwrap();
+    let j = one.journal().unwrap();
+    assert_eq!((j.book.wac("rice", KG), j.entries[1].value), (Some(500), Some(1500)));
+}
+
+/// THE SAME LABEL IS ONE BOX: two records under one lot code fold into one lot
+/// that shows the FIRST price only (the average and the paper's rows stay
+/// right). So a form that takes several prices on a position gives each price
+/// its own code; then no lot is merged and no price is hidden.
+#[test]
+fn two_prices_under_one_lot_code_merge_the_lot_and_distinct_codes_do_not() {
+    let mut same = StockLog::create_sized(64 * 1024).unwrap();
+    same.receive_with("rice", 10 * KG, &paper(500, 1, Some("L1"))).unwrap();
+    same.receive_with("rice", 5 * KG, &paper(600, 1, Some("L1"))).unwrap();
+    assert_eq!(lots(&same), vec![("L1".into(), 15 * KG, Some(500), Some(1))], "one lot, the second price not on it");
+    let j = same.journal().unwrap();
+    assert_eq!(j.book.wac("rice", KG), Some(533), "the average still weighs both");
+    assert_eq!(j.entries.iter().filter_map(|e| e.value).sum::<i64>(), 8000);
+
+    let mut apart = StockLog::create_sized(64 * 1024).unwrap();
+    apart.receive_with("rice", 10 * KG, &paper(500, 1, Some("L1"))).unwrap();
+    apart.receive_with("rice", 5 * KG, &paper(600, 1, Some("L1/2"))).unwrap();
+    assert_eq!(lots(&apart), vec![("L1".into(), 10 * KG, Some(500), Some(1)), ("L1/2".into(), 5 * KG, Some(600), Some(1))]);
+    assert_eq!(apart.journal().unwrap().book.wac("rice", KG), Some(533));
+}
+
+/// PRICES BY DATE: two deliveries of one position on two days at two prices.
+/// Each is its own lot with its own day and price; the average weighs them,
+/// and a later write-off leaves at that average, off the older lot first.
+#[test]
+fn two_days_two_prices_keep_a_price_per_date_and_one_average() {
+    const DAY1: i64 = 1_762_732_800_000;
+    const DAY2: i64 = DAY1 + 86_400_000;
+    let mut log = StockLog::create_sized(64 * 1024).unwrap();
+    log.receive_with("rice", 2 * KG, &paper(1800, DAY1, None)).unwrap();
+    assert_eq!(log.journal().unwrap().book.wac("rice", KG), Some(1800));
+    log.receive_with("rice", KG, &paper(2500, DAY2, None)).unwrap();
+    let j = log.journal().unwrap();
+    // (2000 x 1800 + 1000 x 2500) / 3000 = 2033.33 per kg.
+    assert_eq!(j.book.wac("rice", KG), Some(2033));
+    assert_eq!(lots(&log), vec![("#0".into(), 2 * KG, Some(1800), Some(DAY1)), ("#1".into(), KG, Some(2500), Some(DAY2))]);
+    // 500 g later: 500 x 2033.333 = 1016.67, which is 1017.
+    log.append(&waste(500)).unwrap();
+    let j = log.journal().unwrap();
+    assert_eq!(j.entries[2].value, Some(1017));
+    assert_eq!(lots(&log), vec![("#0".into(), 1500, Some(1800), Some(DAY1)), ("#1".into(), KG, Some(2500), Some(DAY2))]);
+    assert_eq!(j.book.wac("rice", KG), Some(2033), "a draw does not move the average");
+}

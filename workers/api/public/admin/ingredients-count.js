@@ -3,15 +3,19 @@
 // its invoice, and the write-offs with what they cost.
 //
 //   count     POST /api/owner/stock/count     {lines:[{item, observed}]}
-//   delivery  POST /api/owner/stock/received  one per line, the paper on each
+//   delivery  POST /api/owner/stock/received  one per quantity and price, the paper on each
+//             POST /api/owner/supplies/bulk   once, first, for the positions typed new
 //   waste     GET  /api/owner/stock/waste     every binned thing, valued
 //
 // Whole grams throughout (1,5 kg is read as 1500 g); money in minor units.
 
-import { $, $$, esc, t, api, post, toast, sheet, busy, money, day, clock, icon, retranslate, hydrate } from '/admin/core.js';
-import { ui, k as key, btn, field, input, select, chips, press, empty, loading, rowDiv } from '/admin/parts.js';
+import { $, $$, esc, t, api, post, toast, sheet, busy, money, day, clock, icon, retranslate, hydrate, S } from '/admin/core.js';
+import { decimalsOf } from '/lib/money.js';
+import { ui, k as key, btn, field, input, chips, press, pill, empty, loading, rowDiv } from '/admin/parts.js';
 import * as C from '/admin/ingredients-calc.js';
 import { openMove, pickSupply } from '/admin/ingredients.js';
+import * as F from '/admin/supply-resolve-field.js';
+import * as R from '/admin/supply-resolve.js';
 
 const fail = e => toast(String(e.message || e));
 const when = ms => (ms ? `${day(ms)} ${clock(ms)}` : '-');
@@ -31,7 +35,7 @@ export function openCount(ctx){
     <div id="cOut"></div>
     ${sessions ? `<p class="eyebrow mt-3" data-t="inv_sessions"></p><div class="kt-wrap"><table class="kt"><thead><tr><th data-t="ka_day"></th><th data-t="inv_lines"></th><th data-t="inv_value"></th></tr></thead><tbody>${sessions}</tbody></table></div>` : ''}`, { name: 'count' });
   const sup = id => all.find(s => s.id === id);
-  $('#cQ').oninput = () => { const q = $('#cQ').value.toLowerCase().trim(); for (const r of $$('[data-row]', $('#cList'))) { const s = sup(r.dataset.row); r.hidden = !!q && !`${s.name} ${s.category}`.toLowerCase().includes(q); } };
+  $('#cQ').oninput = () => { const has = R.finder($('#cQ').value); for (const r of $$('[data-row]', $('#cList'))) r.hidden = !has(sup(r.dataset.row)); };
   for (const inp of $$('[data-ci]', $('#cList'))) inp.oninput = () => {
     const s = sup(inp.dataset.ci), v = C.milli(inp.value, s.unit), el = $(`[data-drift="${CSS.escape(s.id)}"]`);
     const d = v == null ? 0 : v - C.levelMilli(s, 'onHand');
@@ -59,44 +63,99 @@ export function openCount(ctx){
   };
 }
 
+/// One quantity and price under a position; `k` is its place on the line (the
+/// lot code of every pair after the first is told apart by it).
+const pairMarkup = k => `<div class="grid2 pair" data-dp="${k}"><div>${field({ key: 'inv_qty', inputmode: 'decimal', autocomplete: 'off', attrs: { data: { dlq: '1' } } })}</div>
+    <div>${field({ key: 'inv_price', inputmode: 'numeric', autocomplete: 'off', attrs: { data: { dlp: '1' } } })}</div><p data-dperr hidden></p></div>`;
+/// An error on a line or a pair, or none.
+const say = (el, msg) => { el.hidden = !msg; el.innerHTML = msg ? pill('bad', { label: msg }) : ''; };
+
 /// A delivery with every line of its paper: one supplier, one invoice number.
+/// A position is TYPED (`supply-resolve-field.js`): a known name is its id, a
+/// similar one is a question, an unknown one is a new position, created before
+/// anything is received. One position takes several prices: each quantity and
+/// price is its own record and its own lot.
 export function openDelivery(ctx){
-  const all = byShelf(ctx.data?.supplies || []);
   const sups = ctx.data?.suppliers || [];
-  const line = i => `<div class="inv-line" data-dl="${i}">${select({ key: 'ka_ingredient', value: '', options: [{ value: '', key: 'inv_pick' }, ...all.map(s => ({ value: s.id, label: `${s.name} (${s.unit})` }))], attrs: { data: { dls: i } } })}
-      ${field({ key: 'inv_qty', inputmode: 'decimal', autocomplete: 'off', attrs: { data: { dlq: i } } })}
-      ${field({ key: 'inv_price', inputmode: 'numeric', autocomplete: 'off', attrs: { data: { dlp: i } } })}
-      ${field({ key: 'inv_lot', autocomplete: 'off', attrs: { data: { dll: i } } })}
-      ${input({ type: 'date', key: 'inv_expiry', attrs: { data: { dle: i } } })}<span></span></div>`;
+  const line = i => `<div class="group" data-dl="${i}">${F.markup('d' + i)}
+      <div data-dps>${pairMarkup(1)}</div>
+      <div class="btn-row">${btn({ variant: 'ghost', icon: 'plus', key: 'inv_morePrice', data: { dmore: String(i) } })}</div>
+      <div class="grid2 pair"><div>${field({ key: 'inv_lot', autocomplete: 'off', attrs: { data: { dll: '1' } } })}</div><div>${input({ type: 'date', key: 'inv_expiry', attrs: { data: { dle: '1' } } })}</div></div>
+      <p data-dlerr hidden></p></div>`;
   sheet(`<p class="eyebrow" data-t="inv_delivery"></p><h2 data-t="inv_delivery"></h2><p class="hint" data-t="inv_deliveryHint"></p>
     <div class="grid2"><div>${field({ id: 'd-sup', key: 'inv_supplier', autocomplete: 'off', attrs: { list: 'dSupList' } })}<datalist id="dSupList">${sups.map(s => `<option value="${esc(s)}">`).join('')}</datalist></div>
       <div>${field({ id: 'd-doc', key: 'inv_doc', autocomplete: 'off' })}</div></div>
     <p class="ui-label" data-t="inv_price"></p>${chips({ id: 'dMode', values: [{ value: 'per', label: `${t('inv_perKg')} / ${t('inv_perL')} / ${t('inv_perPiece')}` }, { value: 'total', key: 'inv_total' }], value: 'per', attr: 'dmode' })}
-    <div id="dLines">${line(0)}</div>
+    <div id="dLines"></div>
     <div class="btn-row">${btn({ id: 'dAdd', icon: 'plus', key: 'inv_addLine' })}${btn({ id: 'dGo', variant: 'primary', icon: 'check', key: 'inv_saveAll' })}</div>
     <div id="dOut"></div>`, { name: 'delivery' });
-  let n = 1, mode = 'per';
+  let n = 0, mode = 'per', saving = false;
+  const lines = [];
+  const add = () => {
+    const i = n++;
+    $('#dLines').insertAdjacentHTML('beforeend', line(i)); retranslate($('#dLines'));
+    const el = $$('[data-dl]', $('#dLines')).find(x => x.dataset.dl === String(i));
+    const L = { el, f: F.bind($('[data-sr]', el), { supplies: () => ctx.data?.supplies }), pairs: 1 };
+    $('[data-dmore]', el).onclick = () => { $('[data-dps]', el).insertAdjacentHTML('beforeend', pairMarkup(++L.pairs)); retranslate(el); };
+    lines.push(L);
+  };
+  add();
   for (const b of $$('[data-dmode]', $('#sheetIn'))) b.onclick = () => { mode = b.dataset.dmode; press($$('[data-dmode]', $('#sheetIn')), b); };
-  $('#dAdd').onclick = () => { $('#dLines').insertAdjacentHTML('beforeend', line(n++)); retranslate($('#dLines')); };
+  $('#dAdd').onclick = add;
   $('#dGo').onclick = async () => {
-    const paper = { supplier: $('#d-sup').value.trim(), doc: $('#d-doc').value.trim() };
-    const rows = $$('[data-dl]', $('#dLines')).map(r => ({ r, id: $('[data-dls]', r).value, qty: $('[data-dlq]', r).value, price: $('[data-dlp]', r).value,
-      lot: $('[data-dll]', r).value.trim(), expiry: $('[data-dle]', r).value.trim() })).filter(x => x.id);
+    if (saving) return;
+    const rows = lines.map(L => ({ L, got: L.f.settle() })).filter(x => x.got.state !== 'empty');
     if (!rows.length) return toast(t('required'));
+    // A question left open, or a new position without its unit and type: nothing is sent.
+    const stuck = rows.find(x => x.got.state === 'ask' || x.got.state === 'incomplete');
+    if (stuck) { stuck.L.f.focus(); return toast(t(stuck.got.state === 'ask' ? 'sr_answer' : 'sr_fillNew')); }
+    const paper = { supplier: $('#d-sup').value.trim(), doc: $('#d-doc').value.trim() };
     const out = [];
-    await busy($('#dGo'), async () => {
-      for (const x of rows) {
-        const sup = all.find(s => s.id === x.id), m = C.milli(x.qty, sup.unit);
-        if (!m || m <= 0) { out.push([sup.name, t('inv_lineFailed') + ': ' + t('required')]); continue; }
-        const qty = C.showMilli(m);
-        const body = { item: x.id, qty, ...C.priceBody(sup.unit, C.amount(x.price, 'unit'), mode) };
-        for (const [kk, v] of [['supplier', paper.supplier], ['doc', paper.doc], ['lot', x.lot], ['expiry', x.expiry]]) if (v) body[kk] = v;
-        try { const r = await post('/owner/stock/received', body); const v = (r.lines || [])[0]?.value; out.push([sup.name, `${qty} ${sup.unit}${v != null ? ' · ' + money(v) : ''}`]); x.r.remove(); }
-        catch (e) { out.push([sup.name, `${t('inv_lineFailed')}: ${e.message || e}`]); }
-      }
-    });
+    let created = false;
+    saving = true;
+    try {
+      await busy($('#dGo'), async () => {
+        // NEW POSITIONS FIRST, in one call: a receipt needs the id it lands on.
+        const news = rows.filter(x => x.got.state === 'new');
+        const made = news.length ? await F.createAll(news.map(x => x.got), ctx) : null;
+        created = !!made;
+        for (const x of news) {
+          const sup = made.get(R.fold(x.got.name));
+          if (sup && !sup.retired) { x.L.f.pick(sup); x.got = { state: 'ok', sup }; say($('[data-dlerr]', x.L.el), ''); }
+          else { x.got = null; say($('[data-dlerr]', x.L.el), t(sup ? 'sr_retired' : 'sr_noId')); }
+        }
+        for (const x of rows) {
+          if (!x.got) continue;
+          const sup = x.got.sup, el = x.L.el;
+          const lot = $('[data-dll]', el).value.trim(), expiry = $('[data-dle]', el).value.trim();
+          for (const pr of $$('[data-dp]', el)) {
+            const typedQty = $('[data-dlq]', pr).value.trim(), typedPrice = $('[data-dlp]', pr).value.trim();
+            // An "another price" left blank is not a line of the paper.
+            if (!typedQty && !typedPrice && $$('[data-dp]', el).length > 1) { pr.remove(); continue; }
+            const m = C.milli(typedQty, sup.unit), price = C.priceMinor(typedPrice, decimalsOf(S.venue?.currencyCode || 'ALL'));
+            if (!m || m <= 0) { say($('[data-dperr]', pr), `${t('inv_lineFailed')}: ${t('required')}`); continue; }
+            // A price that does not read is refused here: sent on, it would be a delivery with no price.
+            if (typedPrice && price == null) { say($('[data-dperr]', pr), `${t('inv_lineFailed')}: ${t('inv_badPrice')}`); continue; }
+            const qty = C.showMilli(m), k = Number(pr.dataset.dp);
+            const body = { item: sup.id, qty, ...C.priceBody(sup.unit, price, mode) };
+            // One label, several prices: each price is its own lot, so each gets its own code.
+            for (const [kk, v] of [['supplier', paper.supplier], ['doc', paper.doc], ['lot', lot && k > 1 ? `${lot}/${k}` : lot], ['expiry', expiry]]) if (v) body[kk] = v;
+            let r;
+            try { r = await post('/owner/stock/received', body); }
+            catch (e) { say($('[data-dperr]', pr), `${t('inv_lineFailed')}: ${e.message || e}`); continue; }
+            // Written: it leaves the form before anything else can fail, so a retry cannot write it twice.
+            pr.remove();
+            const v = (r?.lines || [])[0]?.value;
+            out.push([sup.name, `${qty} ${sup.unit}${v != null ? ' · ' + money(v) : ''}`]);
+          }
+          if (!$$('[data-dp]', el).length) { el.remove(); lines.splice(lines.indexOf(x.L), 1); }
+        }
+      });
+    } catch (e) { fail(e); }
+    finally { saving = false; }
     $('#dOut').innerHTML = `<div class="rows">${out.map(([a, b]) => rowDiv({ title: a, sub: esc(b) })).join('')}</div>`;
-    ctx.reload();
+    // Anything written (a receipt, or only the new positions) is on the list behind the sheet at once.
+    if (out.length || created) ctx.reload();
   };
 }
 

@@ -8,14 +8,15 @@
 // ASCII QUOTES ONLY in this file (DOWIZ-COMMON-RULES rule 11).
 
 import { MILLI } from './qty-adapter.js';
+import { finder } from './supply-resolve.js';
 
 /// The picker's list: the supplies of `kind` ('all' or one kind) matching `q`
-/// by name or category, not already on the recipe. Book order is kept.
+/// by name or category, not already on the recipe. Book order is kept. The
+/// match is by the names' fold (`supply-resolve.js`): another spelling or
+/// ending of a name finds it.
 export function bookList(book, { q = '', kind = 'all', draft = [] } = {}){
-  const needle = String(q || '').toLowerCase().trim();
-  return (book || []).filter(s => (kind === 'all' || s.kind === kind)
-    && (!needle || `${s.name} ${s.category || ''}`.toLowerCase().includes(needle))
-    && !draft.some(l => l.supply === s.id));
+  const has = finder(q);
+  return (book || []).filter(s => (kind === 'all' || s.kind === kind) && has(s) && !draft.some(l => l.supply === s.id));
 }
 
 /// TZ 2026-10-16 "no ingredient lost": the recipe lines a save would drop -- a quantity the

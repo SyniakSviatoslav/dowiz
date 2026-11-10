@@ -1,0 +1,88 @@
+# Lesson O41 (owner). The ONE source for the in-app tour (/lib/learn.js, via
+# tools/learn/build-lessons.mjs -> workers/api/public/learn/lessons.json) and for the recorder,
+# which drives each step's `action` and burns its `title`/`caption` in as the subtitles.
+# W-PAYROLL: hourly pay (admin/payroll.js). Steps WAIT: a recording must not enter hours.
+id: O41
+role: owner
+module: payroll
+order: 57
+covers: [payroll]
+title:
+  sq: "Paga sipas orëve"
+  en: "Hourly pay"
+  uk: "Погодинна зарплата"
+  ru: "Почасовая зарплата"
+goal:
+  sq: "Shkruani orët e punonjësve; paga e muajit llogaritet vetë."
+  en: "Enter your staff's hours; the month's pay adds itself up."
+  uk: "Вносьте години працівників; зарплата за місяць рахується сама."
+  ru: "Вносите часы сотрудников; зарплата за месяц считается сама."
+steps:
+  - key: 1
+    anchor: more.tile.payroll
+    pending: no
+    writes: no
+    action:
+      do: click
+      selector: '[data-tour="more.tile.payroll"]'
+    title:
+      sq: "Paga"
+      en: "Payroll"
+      uk: "Зарплата"
+      ru: "Зарплата"
+    caption:
+      sq: "Orët dhe paga e muajit."
+      en: "The month's hours and pay."
+      uk: "Години й зарплата за місяць."
+      ru: "Часы и зарплата за месяц."
+  - key: 2
+    anchor: payroll.month
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="payroll.month"]'
+    title:
+      sq: "Muajt e kaluar"
+      en: "Past months"
+      uk: "Минулі місяці"
+      ru: "Прошлые месяцы"
+    caption:
+      sq: "Shfletoni muajt me shigjetat."
+      en: "Step through months with the arrows."
+      uk: "Гортайте місяці стрілками."
+      ru: "Листайте месяцы стрелками."
+  - key: 3
+    anchor: payroll.add
+    pending: no
+    writes: yes
+    action:
+      do: wait
+      selector: '[data-tour="payroll.add"]'
+    title:
+      sq: "Shto orë"
+      en: "Add hours"
+      uk: "Додати години"
+      ru: "Добавить часы"
+    caption:
+      sq: "Punonjësi, data dhe orët; paga llogaritet vetë."
+      en: "Employee, date and hours; the pay is worked out for you."
+      uk: "Працівник, дата й години; зарплата рахується сама."
+      ru: "Сотрудник, дата и часы; зарплата считается сама."
+  - key: 4
+    anchor: payroll.grid
+    pending: no
+    writes: no
+    action:
+      do: wait
+      selector: '[data-tour="payroll.grid"]'
+    title:
+      sq: "Tabela e muajit"
+      en: "The month's table"
+      uk: "Таблиця місяця"
+      ru: "Таблица месяца"
+    caption:
+      sq: "Orët sipas datës, totali i paguar për secilin."
+      en: "Hours by date and each person's total pay."
+      uk: "Години за датами й підсумок зарплати кожного."
+      ru: "Часы по датам и итог зарплаты каждого."

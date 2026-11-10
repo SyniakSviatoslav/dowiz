@@ -97,7 +97,16 @@ export function noRecipeMarkup(noRecipe, t){
 export function cardMarkup(sup, { money, t, when, warnDays }){
   const state = C.levelState(sup), price = C.priceOf(sup), per = `/${C.basisOf(sup.unit) === 1 ? '' : '100'}${sup.unit}`;
   const w = C.weights(sup, C.basisOf(sup.unit) === 1 ? 1 : 1000);
-  const lots = (sup.lots || []).map(l => `<tr><td>${esc(l.code)}</td><td>${l.left} ${esc(sup.unit)}</td><td>${esc(l.expiry || '-')}</td>
+  // PRICES BY DATE: each delivery is its own lot, so a lot row carries the day it came in and
+  // what it cost, newest first. The price is the lot's own when the hub sends it; else the one
+  // priced delivery of that moment, quantity and label. Two that cannot be told apart show none.
+  const paid = l => {
+    if (l.perBasis != null) return l.perBasis;
+    const same = (sup.prices || []).filter(p => l.at != null && p.at === l.at && p.qty === l.received && (p.lot == null || p.lot === l.code) && p.perBasis != null);
+    return same.length && same.every(p => p.perBasis === same[0].perBasis) ? same[0].perBasis : null;
+  };
+  const lots = (sup.lots || []).slice().sort((a, b) => (b.at || 0) - (a.at || 0)).map(l => `<tr><td>${esc(l.code)}</td><td>${l.at ? esc(when(l.at)) : '-'}</td><td>${l.left} ${esc(sup.unit)}</td>
+      <td>${paid(l) != null ? money(paid(l)) + esc(per) : '-'}</td><td>${esc(l.expiry || '-')}</td>
       <td>${l.daysLeft == null ? '' : pill(C.expiryTone(l.daysLeft, warnDays), { label: `${l.daysLeft} ${t('inv_daysLeft')}` })}</td><td>${esc(l.supplier || '')}</td></tr>`).join('');
   const prices = (sup.prices || []).slice().reverse().map(p => `<tr><td>${esc(when(p.at))}</td><td>${p.perBasis != null ? money(p.perBasis) : '-'}${esc(per)}</td><td>${p.qty} ${esc(sup.unit)}</td><td>${esc(p.supplier || '')}</td><td>${esc(p.doc || '')}</td></tr>`).join('');
   const moves = (sup.moves || []).slice().reverse().map(m => `<tr><td>${esc(when(m.at))}</td><td>${esc(t('inv_mv_' + m.kind))}${m.reason ? ' · ' + esc(t(m.reason)) : ''}</td>
@@ -116,7 +125,7 @@ export function cardMarkup(sup, { money, t, when, warnDays }){
     <p class="mono">${esc(t('inv_gross'))} ${w.gross ?? '-'} g → ${esc(t('inv_net'))} ${w.net ?? '-'} g → ${esc(t('inv_out'))} ${w.out ?? '-'} g · ${esc(t('inv_loss'))} ${C.pct(C.lossPm(w))}</p>
     <p class="hint">${esc(t('inv_stage_clean'))}: ${C.pct(w.cleanPm)} ${adopt('clean', sup.measuredCleanPm)}</p>
     <p class="hint">${esc(t('inv_stage_cook'))}: ${C.pct(w.cookPm)} ${adopt('cook', sup.measuredCookPm)}</p>
-    <p class="eyebrow mt-3" data-t="inv_lots"></p>${table(['inv_lot', 'inv_qty', 'inv_expiry', 'inv_daysLeft', 'inv_supplier'], lots)}
+    <p class="eyebrow mt-3" data-t="inv_lots"></p>${table(['inv_lot', 'inv_lotIn', 'inv_qty', 'inv_price', 'inv_expiry', 'inv_daysLeft', 'inv_supplier'], lots)}
     <p class="eyebrow" data-t="inv_prices"></p>${table(['ka_day', 'inv_price', 'inv_qty', 'inv_supplier', 'inv_doc'], prices)}
     <p class="eyebrow" data-t="inv_moves"></p>${table(['ka_day', 'move', 'inv_qty', 'inv_value', 'inv_lot'], moves)}
     <div class="btn-row">${btn({ id: 'cEdit', variant: 'ghost', icon: 'adjustments', key: 'edit' })}</div>`;

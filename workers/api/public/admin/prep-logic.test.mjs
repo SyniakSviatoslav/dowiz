@@ -89,6 +89,7 @@ test('the picker offers raw items and OTHER semi-finished products, not what is 
   assert.deepEqual(P.pickable(all, '', new Set(['salt']), 'rs').map(s => s.id), ['mitsukan', 'vinegar'], 'preps first, then by name; not itself, not on the card, not retired');
   assert.deepEqual(P.pickable(all, 'mits').map(s => s.id), ['mitsukan']);
   assert.deepEqual(P.pickable([], 'x'), []);
+  assert.deepEqual(P.pickable([{ id: 'eggs', name: 'Яйця', unit: 'unit' }, salt], 'яйцо').map(s => s.id), ['eggs'], 'however it is spelled');
   assert.equal(P.gramsOf({ unit: 'ml' }, 30), 30);
   assert.equal(P.gramsOf({ unit: 'unit' }, 3), null);
   assert.equal(P.gramsOf({ unit: 'unit', weightPerUnit: 12.4 }, 3), 37);

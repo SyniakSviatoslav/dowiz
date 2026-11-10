@@ -11,6 +11,9 @@ import { T } from '/admin/i18n.js';
 
 export const WORDS = {
   en: {
+    sr_type: 'Type a name', sr_isIt: 'Is it «{name}»?', sr_which: 'Is it one of these?', sr_yes: 'Yes', sr_new: 'No, a new position', sr_newHint: 'New position «{name}»: choose its unit and type', sr_noSuch: 'No such position', sr_addNew: 'New position «{name}»',
+    sr_unit_g: 'grams (g)', sr_unit_ml: 'millilitres (ml)', sr_unit_unit: 'pieces', sr_answer: 'Answer the line first: is it the existing position or a new one?', sr_fillNew: 'A new position needs its unit and type', sr_retired: 'That name is a retired position: restore it or use another name', sr_noId: 'The position was not created',
+    inv_badPrice: 'The price is not a whole number', inv_morePrice: 'Another price', inv_lotIn: 'Came in',
     inv_wholeUnits: 'At most 3 decimals of the unit: 0,001 kg is 1 g; 2,5 pieces is fine', inv_review: 'Recipe needs review',
     inv_reset: 'Delete all ingredient data', inv_resetAsk: 'This deletes every ingredient, recipe, allergen list and stock record of this venue. It cannot be undone. Type the venue id below to confirm:', inv_resetMismatch: 'The id does not match; nothing was deleted.', inv_resetDone: 'Deleted (ingredients / recipes / stock records)',
     inv_title: 'Ingredients & stock', inv_hint: 'Every ingredient with what is on the shelf. Tap one for its card; the buttons record what happened.',
@@ -45,6 +48,9 @@ export const WORDS = {
     ka_usedHint: 'By recipes = portions sold x recipe (gross). Recorded = what orders took off the shelf. A count difference is what nobody recorded.',
   },
   sq: {
+    sr_type: 'Shkruaj emrin', sr_isIt: 'Është «{name}»?', sr_which: 'Është një nga këto?', sr_yes: 'Po', sr_new: 'Jo, artikull i ri', sr_newHint: 'Artikull i ri «{name}»: zgjidh njësinë dhe llojin', sr_noSuch: 'Nuk ka artikull të tillë', sr_addNew: 'Artikull i ri «{name}»',
+    sr_unit_g: 'gram (g)', sr_unit_ml: 'mililitra (ml)', sr_unit_unit: 'copë', sr_answer: 'Përgjigju rreshtit: është artikulli ekzistues apo i ri?', sr_fillNew: 'Artikulli i ri kërkon njësinë dhe llojin', sr_retired: 'Ky emër është i një artikulli të arkivuar: riktheje ose përdor një emër tjetër', sr_noId: 'Artikulli nuk u krijua',
+    inv_badPrice: 'Çmimi duhet të jetë numër i plotë', inv_morePrice: 'Një çmim tjetër', inv_lotIn: 'Erdhi',
     inv_wholeUnits: 'Të shumtën 3 dhjetore të njësisë: 0,001 kg është 1 g; 2,5 copë është në rregull', inv_review: 'Receta kërkon rishikim',
     inv_reset: 'Fshi të gjitha të dhënat e përbërësve', inv_resetAsk: 'Kjo fshin çdo përbërës, recetë, listë alergjenësh dhe regjistrim magazine të këtij lokali. Nuk kthehet mbrapsht. Shkruani ID-në e lokalit më poshtë për ta konfirmuar:', inv_resetMismatch: 'ID-ja nuk përputhet; asgjë nuk u fshi.', inv_resetDone: 'U fshinë (përbërës / receta / regjistrime magazine)',
     inv_title: 'Përbërësit & magazina', inv_hint: 'Çdo përbërës me sa ka në raft. Prekni njërin për kartelën; butonat regjistrojnë çfarë ndodhi.',
@@ -79,6 +85,9 @@ export const WORDS = {
     ka_usedHint: 'Sipas recetave = porcione të shitura x receta (bruto). Regjistruar = sa hoqën porositë nga rafti. Diferenca e numërimit është ajo që askush nuk regjistroi.',
   },
   uk: {
+    sr_type: 'Введіть назву', sr_isIt: 'Це «{name}»?', sr_which: 'Це одна з цих позицій?', sr_yes: 'Так', sr_new: 'Ні, нова позиція', sr_newHint: 'Нова позиція «{name}»: оберіть одиницю і тип', sr_noSuch: 'Такої позиції немає', sr_addNew: 'Нова позиція «{name}»',
+    sr_unit_g: 'грами (г)', sr_unit_ml: 'мілілітри (мл)', sr_unit_unit: 'штуки', sr_answer: 'Спершу дайте відповідь у рядку: це наявна позиція чи нова?', sr_fillNew: 'Для нової позиції оберіть одиницю і тип', sr_retired: 'Ця назва належить позиції в архіві: відновіть її або назвіть інакше', sr_noId: 'Позицію не створено',
+    inv_badPrice: 'Ціна має бути цілим числом', inv_morePrice: 'Ще ціна', inv_lotIn: 'Надійшло',
     inv_wholeUnits: 'Не більше 3 знаків після коми: 0,001 кг це 1 г; 2,5 штуки можна', inv_review: 'Потрібен перегляд рецептури',
     inv_reset: 'Видалити всі дані про інгредієнти', inv_resetAsk: 'Буде видалено всі інгредієнти, рецепти, списки алергенів і записи складу цього закладу. Скасувати не можна. Щоб підтвердити, введіть id закладу нижче:', inv_resetMismatch: 'Id не збігається; нічого не видалено.', inv_resetDone: 'Видалено (інгредієнти / рецепти / записи складу)',
     inv_title: 'Інгредієнти та склад', inv_hint: 'Кожен інгредієнт і скільки його на полиці. Торкніться, щоб відкрити картку; кнопки записують, що сталося.',
@@ -113,6 +122,9 @@ export const WORDS = {
     ka_usedHint: 'За техкартами = продані порції x техкарта (брутто). Записано = що замовлення зняли з полиці. Розбіжність інвентаризації = те, чого ніхто не записав.',
   },
   ru: {
+    sr_type: 'Введите название', sr_isIt: 'Это «{name}»?', sr_which: 'Это одна из этих позиций?', sr_yes: 'Да', sr_new: 'Нет, новая позиция', sr_newHint: 'Новая позиция «{name}»: выберите единицу и тип', sr_noSuch: 'Такой позиции нет', sr_addNew: 'Новая позиция «{name}»',
+    sr_unit_g: 'граммы (г)', sr_unit_ml: 'миллилитры (мл)', sr_unit_unit: 'штуки', sr_answer: 'Сначала ответьте в строке: это имеющаяся позиция или новая?', sr_fillNew: 'Для новой позиции выберите единицу и тип', sr_retired: 'Это название позиции в архиве: восстановите её или назовите иначе', sr_noId: 'Позиция не создана',
+    inv_badPrice: 'Цена должна быть целым числом', inv_morePrice: 'Ещё цена', inv_lotIn: 'Поступило',
     inv_wholeUnits: 'Не больше 3 знаков после запятой: 0,001 кг это 1 г; 2,5 штуки можно', inv_review: 'Требуется пересмотр рецептуры',
     inv_reset: 'Удалить все данные об ингредиентах', inv_resetAsk: 'Будут удалены все ингредиенты, рецепты, списки аллергенов и записи склада этого заведения. Отменить нельзя. Чтобы подтвердить, введите id заведения ниже:', inv_resetMismatch: 'Id не совпадает; ничего не удалено.', inv_resetDone: 'Удалено (ингредиенты / рецепты / записи склада)',
     inv_title: 'Ингредиенты и склад', inv_hint: 'Каждый ингредиент и сколько его на полке. Коснитесь, чтобы открыть карточку; кнопки записывают, что произошло.',

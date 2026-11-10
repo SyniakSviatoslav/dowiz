@@ -23,6 +23,9 @@ mod cube;
 /// The kitchen's forecast and prep list, and P7's surplus (W-PREP).
 #[path = "forecast.rs"]
 mod forecast;
+/// The owner's money sheet: expenses, the month's plus / minus / net (W-FINANCE).
+#[path = "finance.rs"]
+mod finance;
 // The plain-Rust request/response (W-COV C2): these bodies run under `cargo test`.
 use crate::wire::{Call as Request, Reply as Response};
 
@@ -55,6 +58,7 @@ impl HubImages {
             "week_top" => self.fold_week_top(req).await,
             "haccp" => self.fold_haccp(req).await,
             "dashboard" => self.fold_dashboard(req).await,
+            "finance" => self.fold_finance(req).await, // W-FINANCE
             _ => Response::error("no such fold", 404),
         }
     }

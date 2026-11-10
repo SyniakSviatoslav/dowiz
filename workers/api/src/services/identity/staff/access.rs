@@ -221,7 +221,7 @@ pub(crate) const ROUTES: &[(&str, &str, Door, Kitchen)] = &[
     ("post", "/api/owner/apikeys/revoke", Owner, No),
     ("post", "/api/owner/place", Owner, No),
     ("post", "/api/owner/logo", Owner, No),
-    ("post", "/api/owner/logo/clear", Owner, No),
+    ("post", "/api/owner/logo/clear", Owner, No), ("get", "/api/owner/payroll", Owner, No), ("get", "/api/owner/payroll/history", Owner, No), ("post", "/api/owner/payroll/entry", Owner, No), ("post", "/api/owner/payroll/entry/delete", Owner, No), ("post", "/api/owner/payroll/rate", Owner, No), ("get", "/api/owner/finance", Owner, No), ("post", "/api/owner/finance/expenses", Owner, No), ("post", "/api/owner/finance/expenses/:id", Owner, No), ("delete", "/api/owner/finance/expenses/:id", Owner, No), // W-FINANCE
 ];
 
 /// Rows whose `lib.rs` line is handed back to the main session (a lane does not edit `lib.rs`). Until it

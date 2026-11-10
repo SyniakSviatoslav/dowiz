@@ -28,6 +28,7 @@ pub mod catalogue;
 pub mod courier;
 pub mod customers;
 pub mod engagement;
+pub mod finance; // W-FINANCE: taxes, other expenses, the month's plus / minus / net
 pub mod identity;
 pub mod loyalty;
 pub mod ordering;

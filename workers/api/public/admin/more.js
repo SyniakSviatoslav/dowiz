@@ -14,6 +14,8 @@ import { openMcp as openMcpSheet } from '/admin/mcp.js';
 import { filter, count } from '/admin/more-find.js';
 import '/admin/publish-i18n.js';
 import '/admin/bag-i18n.js'; // W-QR: the row's own words
+import '/admin/payroll-i18n.js'; // W-PAYROLL: the row's own words
+import '/admin/finance-i18n.js'; // W-FINANCE: the row's own words
 
 /// The rows, in groups, with the sheet each opens (HUB-UX-2026-09-26 §3.3:
 /// most used first). Every icon is a name /lib/icons.css draws -- `apron`
@@ -22,7 +24,7 @@ const GROUPS = [
   ['inbox', [['inbox', 'message-2', openInbox]]],
   ['roomGroup', [['bookings', 'tools-kitchen-2', openBookings], ['floorPlan', 'category', openFloorPlan], ['tableQr', 'photo', openTableQr]]],
   ['marketing', [['promos', 'ticket', openPromos], ['posts', 'send', openPosts], ['campaigns', 'brand-whatsapp', openCampaigns], ['social', 'sparkles', openSocial], ['bagQr', 'shopping-bag', openBag]]],
-  ['analytics', [['analytics', 'chart-bar', openAnalytics], ['ebillsSales', 'receipt', openEbillsSales], ['customers', 'user', openCustomers], ['staff', 'user-plus', openStaff], ['exceptions', 'alert-triangle', openExceptions]]],
+  ['analytics', [['analytics', 'chart-bar', openAnalytics], ['ebillsSales', 'receipt', openEbillsSales], ['finance', 'coin-hole', openFinance], ['customers', 'user', openCustomers], ['staff', 'user-plus', openStaff], ['payroll', 'coin', openPayroll], ['exceptions', 'alert-triangle', openExceptions]]],
   ['learnGroup', [['learn', 'player-play', openLearn]]],
   ['settingsVenue', [['venue', 'home', openVenue], ['hours', 'clock', openHours], ['deliveryTerms', 'bike', openDelivery], ['deliveryArea', 'map-pin', openZones], ['payments', 'coin-hole', openPayments],
                      ['branding', 'fan', openBranding], ['features', 'tools-kitchen-2', openFeatures], ['preview', 'eye', openPreview], ['pubMenu', 'cloud-upload', openPubMenu]]],
@@ -102,6 +104,8 @@ export async function learnFromHash(){ if (/learn=/.test(location.hash)) (await 
 async function openEbills(){ (await import('/admin/ebills.js')).open(); }
 // The till's sales of the last 30 days and their numbers (W-EBILLS-TAB): its own sheet, under Analytics.
 async function openEbillsSales(){ (await import('/admin/ebills-sales.js')).open(); }
+// Taxes, other spending and the month's plus / minus / net (W-FINANCE): its own sheet, under Analytics.
+async function openFinance(){ (await import('/admin/finance.js')).open(); }
 // The data processing agreement (P9): read and accept it for the venue.
 async function openDpa(){ (await import('/admin/dpa.js')).open(); }
 
@@ -125,6 +129,8 @@ async function openTableQr(){ (await import('/admin/tableqr.js')).open(); }
 // guest from a booking and refuses the writes; the sheets draw no action.
 async function openBookings(){ (await import('/admin/bookings.js')).open({ readOnly: readOnly(me(), 'bookings') }); }
 async function openFloorPlan(){ (await import('/admin/floorplan.js')).open({ readOnly: readOnly(me(), 'floorPlan') }); }
+
+async function openPayroll(){ (await import('/admin/payroll.js')).open(); } // W-PAYROLL
 
 // ── staff ───────────────────────────────────────────────────────────────────
 async function openStaff(){

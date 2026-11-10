@@ -12,7 +12,7 @@ use worker::*;
 pub mod ingredients_reset;
 pub mod orders; // S2b: the kitchen tablet's offline order taps, rebased on the hub.
 pub mod preps; // Semi-finished products: cards, where-used, one sale's leaves.
-pub mod stock;
+pub mod payroll; pub mod stock; // W-PAYROLL: the hourly-pay tab beside the stock.
 pub mod supplies;
 pub mod waste;
 

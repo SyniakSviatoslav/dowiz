@@ -407,6 +407,11 @@ pub(crate) fn router<R: routes_dispatch::Routes>(r: R) -> R {
         .post_async("/api/owner/staff/invite", |r, c| edge::run(r, c, services::identity::staff_admin::invite_staff))
         .post_async("/api/owner/staff/:id", |r, c| edge::run(r, c, services::identity::staff_admin::set_staff))
         .post_async("/api/owner/staff/:id/password", |r, c| edge::run(r, c, services::identity::staff::password::owner_reset))
+        .get_async("/api/owner/payroll", |r, c| edge::run(r, c, services::operations::payroll::month_route)) // W-PAYROLL
+        .get_async("/api/owner/payroll/history", |r, c| edge::run(r, c, services::operations::payroll::history_route))
+        .post_async("/api/owner/payroll/entry", |r, c| edge::run(r, c, services::operations::payroll::set_entry))
+        .post_async("/api/owner/payroll/entry/delete", |r, c| edge::run(r, c, services::operations::payroll::delete_entry))
+        .post_async("/api/owner/payroll/rate", |r, c| edge::run(r, c, services::operations::payroll::set_rate))
         .get_async("/api/staff/room", |r, c| edge::run(r, c, routed(Kind::StaffRoom)))
         .post_async("/api/staff/orders/:id/amend", |r, c| edge::run(r, c, services::orders::room::handlers::amend))
         .post_async("/api/staff/orders/:id/pay", |r, c| edge::run(r, c, services::orders::room::pay::pay))
@@ -553,6 +558,11 @@ pub(crate) fn router<R: routes_dispatch::Routes>(r: R) -> R {
         .post_async("/api/owner/ebills/config", |r, c| edge::run(r, c, ebills::routes::config))
         .post_async("/api/owner/ebills/map", |r, c| edge::run(r, c, ebills::routes::map))
         .get_async("/api/owner/ebills/sales", |r, c| edge::run(r, c, ebills::routes::sales)) // W-EBILLS-TAB: the month's till orders and their numbers
+        // W-FINANCE: the month's money, taxes and other expenses by hand.
+        .get_async("/api/owner/finance", |r, c| edge::run(r, c, services::finance::routes::finance))
+        .post_async("/api/owner/finance/expenses", |r, c| edge::run(r, c, services::finance::routes::add))
+        .post_async("/api/owner/finance/expenses/:id", |r, c| edge::run(r, c, services::finance::routes::edit))
+        .delete_async("/api/owner/finance/expenses/:id", |r, c| edge::run(r, c, services::finance::routes::remove))
         .get_async("/api/owner/sms", |r, c| edge::run(r, c, notify::sms::routes::status)).post_async("/api/owner/sms", |r, c| edge::run(r, c, notify::sms::routes::set)) // W-SMS
         .post_async("/api/owner/sms/test", |r, c| edge::run(r, c, notify::sms::routes::test)).post_async("/api/owner/sms/stop", |r, c| edge::run(r, c, notify::sms::routes::stop))
         .get_async("/api/public/locations/:slug/sms", |r, c| edge::run(r, c, notify::sms::routes::box_for))

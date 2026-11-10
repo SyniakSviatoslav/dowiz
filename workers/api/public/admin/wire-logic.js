@@ -16,7 +16,7 @@ import { orderRef } from '../lib/ui/core.js';
 export function parseMinor(text, decimals = 0){
   const s = String(text ?? '').trim().replace(/[\s\u00a0']/g, '');
   if (decimals === 0) {
-    if (!/^(\d{1,3}(?:[.,]\d{3})+|\d+)$/.test(s)) return null;
+    if (!/^([1-9]\d{0,2}(?:[.,]\d{3})+|\d+)$/.test(s)) return null;
     const n = Number(s.replace(/[.,]/g, ''));
     return Number.isSafeInteger(n) ? n : null;
   }

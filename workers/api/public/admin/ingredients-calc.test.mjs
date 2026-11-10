@@ -122,3 +122,10 @@ test('an emptied loss field takes the loss off the card', () => {
   assert.equal(C.lossOfField('85', 700), 850);
   assert.equal(C.lossOfField('abc', 700), null);
 });
+
+test('a delivery price is read in the currency of the venue', () => {
+  assert.equal(C.priceMinor('1 500', 0), 1500);
+  assert.equal(C.priceMinor('12', 2), 1200);
+  assert.equal(C.priceMinor('12,50', 2), 1250);
+  for (const bad of ['', 'abc', '12.505']) assert.equal(C.priceMinor(bad, 2), null, bad);
+});
