@@ -257,6 +257,25 @@ test('TZ4: a component ticked, a search typed and cleared: the tick is kept, and
   assert.deepEqual(box.querySelectorAll('.rc-line b').map(b => b.textContent), ['Tuna', 'Rice', 'Nori']);
 });
 
+test('a recipe picker offers a name nobody has; the new position is ticked and Add takes it', async () => {
+  freshBook(); const { box, f } = page({ ...BASE, 'GET /owner/stock': { supplies: BOOK4, noRecipe: [] },
+    'POST /owner/supplies/bulk': b => ({ added: b.items.map(i => ({ id: 'n1', name: i.name, unit: i.unit, kind: i.kind, category: '' })), existing: [], matched: [], near: [] }) });
+  await M.openDish('d1'); await tick();
+  assert.equal(box.querySelector('#rcNewGo'), null, 'no offer with an empty search');
+  typeSearch(box, 'nori');
+  assert.equal(box.querySelector('#rcNewGo'), null, 'no offer for a name the venue has');
+  typeSearch(box, 'Судочок');
+  box.querySelector('#rcNewGo').onclick();
+  assert.ok(box.querySelector('#d-price'), 'the dish sheet stays open');
+  box.querySelector('[data-srunit="unit"]').onclick();
+  box.querySelector('[data-srkind="packaging"]').onclick();
+  await box.querySelector('#srGo').onclick(); await tick();
+  assert.equal(f.calls.filter(c => c[1] === '/owner/supplies/bulk').length, 1);
+  assert.ok(box.querySelector('[data-rs="n1"]')?.checked, 'the new position is ticked');
+  box.querySelector('#rcAdd').onclick();
+  assert.deepEqual(box.querySelectorAll('.rc-line b').map(b => b.textContent), ['Tuna', 'Rice', 'Судочок']);
+});
+
 test('TZ4 twin: a tick hidden by the search is still added, and the kind chips keep ticks too; an untick is honoured', async () => {
   freshBook(); const { box } = page({ ...BASE, 'GET /owner/stock': { supplies: BOOK4, noRecipe: [] } });
   await M.openDish('d1'); await tick();

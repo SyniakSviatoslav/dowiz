@@ -16,7 +16,11 @@
 //! applies (`public/admin/supply-resolve.js`): case, accents and the Ukrainian
 //! and Russian spellings of one word are one name, so two people typing on two
 //! phones land on one position. Only the exact fold: "the same word with
-//! another ending" is a question the form asks a person, never decided here.
+//! another ending" is a question for a person, never decided here. An item
+//! that carries `notNear` (the ids its person already said it is not) comes
+//! from a form that can ask: a stored name near it and not on that list is
+//! answered in `near` and nothing is written for that item, because another
+//! phone may have made it after this one read the list.
 //! A category goes the same way: one whose fold the venue already has is
 //! stored under the existing spelling.
 //!
@@ -36,6 +40,8 @@ pub(crate) const ADD: [Cap; 2] = [Cap::Catalog, Cap::Stock];
 pub const ITEMS_MAX: usize = 200;
 const NAME_MAX: usize = 80;
 const TAILS: usize = 99;
+/// How many candidates one question lists.
+const NEAR_MAX: usize = 4;
 
 /// A typed name that is a position the venue already has.
 #[derive(Debug, Clone, PartialEq)]
@@ -55,6 +61,8 @@ pub struct Added {
     pub write: Vec<(String, Value)>,
     pub existing: Vec<String>,
     pub matched: Vec<Match>,
+    /// Stored names a form has yet to ask about, each under the name typed.
+    pub near: Vec<Match>,
 }
 
 /// THE FORM NAMES ARE COMPARED IN: lower case, accents off, the Ukrainian and
@@ -107,6 +115,70 @@ fn key(name: &str) -> String {
     if f.is_empty() { name.to_lowercase() } else { f }
 }
 
+fn prefix_len(a: &[char], b: &[char]) -> usize {
+    a.iter().zip(b).take_while(|(x, y)| x == y).count()
+}
+
+/// At most one insertion, deletion or substitution apart.
+fn one_edit(a: &[char], b: &[char]) -> bool {
+    if a.len().abs_diff(b.len()) > 1 {
+        return false;
+    }
+    let p = prefix_len(a, b);
+    let (short, long) = if a.len() <= b.len() { (a, b) } else { (b, a) };
+    if short.len() == long.len() {
+        short.get(p + 1..) == long.get(p + 1..)
+    } else {
+        short.get(p..) == long.get(p + 1..)
+    }
+}
+
+fn is_vowel(c: char) -> bool {
+    "aeiouyаеиоуюя".contains(c)
+}
+
+/// Two folded words that are one word: the same, another ending, one vowel
+/// swapped, or one typo in a long word.
+fn near_word(a: &[char], b: &[char]) -> bool {
+    if a == b {
+        return true;
+    }
+    let p = prefix_len(a, b);
+    let (ra, rb) = (a.len() - p, b.len() - p);
+    (p >= 3 && ra <= 1 && rb <= 1)
+        || (p >= 4 && ra <= 3 && rb <= 3)
+        || (a.len() == b.len() && a.len() >= 3 && a[p + 1..] == b[p + 1..] && is_vowel(a[p]) && is_vowel(b[p]))
+        || (a.len() >= 5 && b.len() >= 5 && one_edit(a, b))
+}
+
+/// A folded name's words and numbers.
+fn parts(f: &str) -> (Vec<Vec<char>>, Vec<&str>) {
+    let (nums, words): (Vec<&str>, Vec<&str>) = f.split(' ').filter(|w| !w.is_empty()).partition(|w| w.starts_with(|c: char| c.is_ascii_digit()));
+    (words.iter().map(|w| w.chars().collect()).collect(), nums)
+}
+
+/// Two folded names that may be one position, by the rule the console's
+/// resolver applies. A differing number is never near; every word of the
+/// shorter name must be a word of the longer, in any order.
+fn is_near(a: &str, b: &str) -> bool {
+    let ((wa, na), (wb, nb)) = (parts(a), parts(b));
+    if !na.is_empty() && !nb.is_empty() && na != nb {
+        return false;
+    }
+    let (short, long) = if wa.len() <= wb.len() { (&wa, &wb) } else { (&wb, &wa) };
+    if short.is_empty() {
+        return false;
+    }
+    let mut used = vec![false; long.len()];
+    let mut real = false;
+    for w in short {
+        let Some(hit) = (0..long.len()).find(|&i| !used[i] && near_word(w, &long[i])) else { return false };
+        used[hit] = true;
+        real |= w.len().min(long[hit].len()) >= 3;
+    }
+    real
+}
+
 /// The plan for `items` against the supplies already stored. PURE.
 pub fn plan(items: &[Value], stored: &[(String, String)]) -> std::result::Result<Added, String> {
     if items.is_empty() || items.len() > ITEMS_MAX {
@@ -127,6 +199,7 @@ pub fn plan(items: &[Value], stored: &[(String, String)]) -> std::result::Result
             known.push((key(&name), Match { typed: String::new(), id: id.clone(), name, unit, retired }));
         }
     }
+    let stored_names = known.len();
     let mut ids: Vec<String> = stored.iter().map(|(id, _)| id.clone()).collect();
     let mut out = Added::default();
     for (i, it) in items.iter().enumerate() {
@@ -140,6 +213,18 @@ pub fn plan(items: &[Value], stored: &[(String, String)]) -> std::result::Result
             out.existing.push(name);
             continue;
         }
+        if let Some(said_no) = it.get("notNear").and_then(Value::as_array) {
+            let open: Vec<Match> = known[..stored_names]
+                .iter()
+                .filter(|(f, m)| !m.retired && !said_no.iter().any(|x| x.as_str() == Some(m.id.as_str())) && is_near(&k, f))
+                .take(NEAR_MAX)
+                .map(|(_, m)| Match { typed: name.clone(), ..m.clone() })
+                .collect();
+            if !open.is_empty() {
+                out.near.extend(open);
+                continue;
+            }
+        }
         let base: String = dowiz_hub::import::slug(&name).chars().take(60).collect();
         let Some(id) = std::iter::once(base.clone()).chain((2..=TAILS).map(|n| format!("{base}-{n}"))).find(|c| !ids.contains(c)) else {
             return Err(format!("line {}: no id is free for {name}", i + 1));
@@ -148,6 +233,7 @@ pub fn plan(items: &[Value], stored: &[(String, String)]) -> std::result::Result
         let Some(m) = v.as_object_mut() else { return Err(format!("line {}: not an ingredient", i + 1)) };
         m.insert("id".into(), json!(id));
         m.insert("name".into(), json!(name));
+        m.remove("notNear");
         // ONE GROUP, ONE SPELLING: the venue's own, or the first one typed.
         if let Some(typed) = m.get("category").and_then(Value::as_str).map(str::trim).filter(|c| !c.is_empty()).map(str::to_string) {
             match cats.iter().find(|c| fold(c) == fold(&typed)) {
@@ -199,6 +285,7 @@ pub async fn add_supplies(mut req: Request, ctx: RouteContext<crate::Req>) -> Re
         Ok(a) => Response::from_json(&json!({
             "added": a.write.iter().map(|(id, r)| json!({ "id": id, "name": r["name"], "unit": r["unit"], "kind": r["kind"], "category": r["category"] })).collect::<Vec<_>>(),
             "existing": a.existing,
+            "near": a.near.iter().map(|m| json!({ "typed": m.typed, "id": m.id, "name": m.name, "unit": m.unit })).collect::<Vec<_>>(),
             "matched": a.matched.iter().map(|m| json!({ "typed": m.typed, "id": m.id, "name": m.name, "unit": m.unit, "retired": m.retired })).collect::<Vec<_>>(),
         })),
         Err(e) => match e.to_string().split_once("refused: ") {

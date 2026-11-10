@@ -54,7 +54,7 @@ export function bind(root, { supplies, allowNew = true, onChange = () => {} }){
     else ans.innerHTML = '';
     retranslate(ans);
     for (const b of $$('[data-sryes]', ans)) b.onclick = () => pick(st.cands.find(s => s.id === b.dataset.sryes));
-    const nw = $('[data-srnew]', ans); if (nw) nw.onclick = () => set({ mode: 'new', name: inp.value.trim() });
+    const nw = $('[data-srnew]', ans); if (nw) nw.onclick = () => set({ mode: 'new', name: inp.value.trim(), declined: st.cands.map(s => s.id) });
     for (const b of $$('[data-srunit]', ans)) b.onclick = () => { st.unit = b.dataset.srunit; press($$('[data-srunit]', ans), b); onChange(read()); };
     for (const b of $$('[data-srkind]', ans)) b.onclick = () => { st.kind = b.dataset.srkind; press($$('[data-srkind]', ans), b); onChange(read()); };
     const cat = $('[data-srcat]', ans); if (cat) cat.onchange = () => { st.category = R.canonCategory(cat.value, R.categoriesOf(all())); cat.value = st.category; };
@@ -86,7 +86,7 @@ export function bind(root, { supplies, allowNew = true, onChange = () => {} }){
     if (st.mode === 'new' && allowNew) {
       const cat = $('[data-srcat]', ans);
       const category = R.canonCategory(cat ? cat.value : st.category, R.categoriesOf(all()));
-      return st.unit && st.kind ? { state: 'new', name: st.name, unit: st.unit, kind: st.kind, category } : { state: 'incomplete' };
+      return st.unit && st.kind ? { state: 'new', name: st.name, unit: st.unit, kind: st.kind, category, notNear: st.declined || [] } : { state: 'incomplete' };
     }
     return { state: 'ask' };
   }
@@ -97,7 +97,7 @@ export function bind(root, { supplies, allowNew = true, onChange = () => {} }){
     for (const b of $$('[data-srpick]', sugg)) b.onclick = () => pick(all().find(s => s.id === b.dataset.srpick));
   };
   inp.onchange = () => { settle(); };
-  return { read, settle, pick, focus: () => inp.focus(), el: root, input: inp };
+  return { read, settle, pick, ask: cands => set({ mode: 'ask', cands }), focus: () => inp.focus(), el: root, input: inp };
 }
 
 /// Write the new positions of one form in ONE call. `news`: what `read()`
@@ -109,7 +109,7 @@ export function bind(root, { supplies, allowNew = true, onChange = () => {} }){
 export async function createAll(news, ctx){
   const byFold = new Map();
   for (const n of news) if (!byFold.has(R.fold(n.name))) byFold.set(R.fold(n.name), n);
-  const items = [...byFold.values()].map(n => ({ name: n.name, unit: n.unit, kind: n.kind, ...(n.category ? { category: n.category } : {}) }));
+  const items = [...byFold.values()].map(n => ({ name: n.name, unit: n.unit, kind: n.kind, ...(n.category ? { category: n.category } : {}), notNear: n.notNear || [] }));
   const out = new Map();
   if (!items.length) return out;
   const r = await post('/owner/supplies/bulk', withLoc({ items }));
@@ -123,7 +123,40 @@ export async function createAll(news, ctx){
     const known = (have || []).find(s => s.id === m.id);
     out.set(R.fold(m.typed), { ...(known || { id: m.id, name: m.name, unit: m.unit }), retired: !!m.retired });
   }
+  // A name the hub has and this phone has not read yet: a question for the person, on the screen they are on.
+  for (const m of r?.near || []) {
+    let known = (have || []).find(s => s.id === m.id);
+    if (!known) { known = { id: m.id, name: m.name, unit: m.unit, kind: '', category: '', onHand: 0, reserved: 0, available: 0 }; have?.push(known); }
+    const f = R.fold(m.typed), row = out.get(f) || { near: [] };
+    row.near.push(known);
+    out.set(f, row);
+  }
   return out;
+}
+
+/// The save of a one-position form: an answered match, or a new position made.
+const saveNew = (f, ctx, then) => async () => {
+  const got = f.settle();
+  if (got.state === 'ok') return then(got.sup);
+  if (got.state !== 'new') return toast(t(got.state === 'ask' ? 'sr_answer' : got.state === 'incomplete' ? 'sr_fillNew' : 'required'));
+  try {
+    const made = await busy($('#srGo'), () => createAll([got], ctx));
+    const sup = made.get(R.fold(got.name));
+    if (sup?.near) { f.ask(sup.near); return toast(t('sr_answer')); }
+    if (!sup || sup.retired) return toast(t(sup ? 'sr_retired' : 'sr_noId'));
+    ctx.reload?.();
+    then(sup);
+  } catch (e) { toast(String(e.message || e)); }
+};
+
+/// The same form inside `host`, for a picker whose sheet must stay open.
+export function inlineNew(host, ctx, name, then){
+  host.innerHTML = `${markup('new', { labelKey: 'name' })}<div class="btn-row">${btn({ id: 'srGo', variant: 'primary', icon: 'check', key: 'save' })}</div>`;
+  retranslate(host);
+  const f = bind($('[data-sr="new"]', host), { supplies: () => ctx.data?.supplies });
+  f.input.value = name || '';
+  f.settle();
+  $('#srGo').onclick = saveNew(f, ctx, then);
 }
 
 /// A new position from a picker: its name (typed in the search box), unit,
@@ -134,16 +167,5 @@ export function openNew(ctx, name, then){
   const f = bind($('[data-sr="new"]', $('#sheetIn')), { supplies: () => ctx.data?.supplies });
   f.input.value = name || '';
   f.settle();
-  $('#srGo').onclick = async () => {
-    const got = f.settle();
-    if (got.state === 'ok') return then(got.sup);
-    if (got.state !== 'new') return toast(t(got.state === 'ask' ? 'sr_answer' : got.state === 'incomplete' ? 'sr_fillNew' : 'required'));
-    try {
-      const made = await busy($('#srGo'), () => createAll([got], ctx));
-      const sup = made.get(R.fold(got.name));
-      if (!sup || sup.retired) return toast(t(sup ? 'sr_retired' : 'sr_noId'));
-      ctx.reload?.();
-      then(sup);
-    } catch (e) { toast(String(e.message || e)); }
-  };
+  $('#srGo').onclick = saveNew(f, ctx, then);
 }

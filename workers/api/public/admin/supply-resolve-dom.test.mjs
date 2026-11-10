@@ -92,7 +92,7 @@ test('near answered "no, a new position": unit and type are mandatory, then it i
   s.$('[data-srkind="food_ingredient"]', s.line(0)).onclick();
   await s.save();
   assert.deepEqual(s.p.f.calls.map(c => c[1]), ['/owner/supplies/bulk', '/owner/stock/received'], 'created first');
-  assert.deepEqual(s.posts('/owner/supplies/bulk')[0].items, [{ name: 'яйцо', unit: 'unit', kind: 'food_ingredient' }]);
+  assert.deepEqual(s.posts('/owner/supplies/bulk')[0].items, [{ name: 'яйцо', unit: 'unit', kind: 'food_ingredient', notNear: ['eggs'] }]);
   assert.deepEqual(s.posts('/owner/stock/received'), [{ item: 'id-яйцо', qty: '12' }]);
 });
 
@@ -123,7 +123,7 @@ test('none: a container is a new position with a unit, a non-food type and its o
   await s.save();
   const bulk = s.posts('/owner/supplies/bulk');
   assert.equal(bulk.length, 1, 'one call for the whole paper');
-  assert.deepEqual(bulk[0].items, [{ name: 'Судочок 500 мл', unit: 'unit', kind: 'packaging', category: 'Упаковка' }, { name: 'Палички', unit: 'unit', kind: 'utensil', category: 'Одноразове' }],
+  assert.deepEqual(bulk[0].items, [{ name: 'Судочок 500 мл', unit: 'unit', kind: 'packaging', category: 'Упаковка', notNear: [] }, { name: 'Палички', unit: 'unit', kind: 'utensil', category: 'Одноразове', notNear: [] }],
     'the same name typed on two lines is one position');
   assert.deepEqual(s.posts('/owner/stock/received'), [
     { item: 'n-Судочок 500 мл', qty: '200', unitCost: 15, per: 1 }, { item: 'n-Палички', qty: '100' }, { item: 'n-Судочок 500 мл', qty: '50', unitCost: 16, per: 1 }]);
@@ -265,6 +265,42 @@ test('the shelf search finds a name however it is spelled, and still finds a cod
   assert.ok(R.stockSearch('')(rice), 'no words, no filter');
 });
 
+// The hub knows a position this phone has not loaded yet: another phone made it a moment ago.
+const staleHub = () => ({ 'POST /owner/supplies/bulk': b => b.items[0].notNear.length
+  ? { added: [{ id: 'made', name: b.items[0].name, unit: 'unit', kind: 'packaging', category: '' }], existing: [], matched: [], near: [] }
+  : { added: [], existing: [], matched: [], near: [{ typed: b.items[0].name, id: 'lid', name: 'Кришка', unit: 'unit' }] } });
+const typedNew = async s => {
+  s.type(0, 'Кришки');
+  s.$('[data-srunit="unit"]', s.line(0)).onclick();
+  s.$('[data-srkind="packaging"]', s.line(0)).onclick();
+  s.pair(0, 0, '7', '');
+  await s.save();
+};
+
+test('a name another phone just made is a question on this one; yes receives onto that position', async () => {
+  const s = open(staleHub(), [eggs, rice]);
+  await typedNew(s);
+  assert.deepEqual(s.posts('/owner/stock/received'), [], 'nothing is received while the question is open');
+  assert.equal(s.$$('[data-sryes]', s.line(0)).length, 1, 'the question is asked on the line');
+  s.$('[data-sryes]', s.line(0)).onclick();
+  s.pair(0, 0, '7', '');
+  await s.save();
+  assert.deepEqual(s.posts('/owner/stock/received'), [{ item: 'lid', qty: '7' }]);
+  assert.equal(s.posts('/owner/supplies/bulk').length, 1, 'no position was made');
+});
+
+test('no, a new position: the answer goes to the hub, and only then is it made', async () => {
+  const s = open(staleHub(), [eggs, rice]);
+  await typedNew(s);
+  s.$('[data-srnew]', s.line(0)).onclick();
+  s.$('[data-srunit="unit"]', s.line(0)).onclick();
+  s.$('[data-srkind="packaging"]', s.line(0)).onclick();
+  s.pair(0, 0, '7', '');
+  await s.save();
+  assert.deepEqual(s.posts('/owner/supplies/bulk').map(b => b.items[0].notNear), [[], ['lid']]);
+  assert.deepEqual(s.posts('/owner/stock/received'), [{ item: 'made', qty: '7' }]);
+});
+
 test('a refused list of new positions writes nothing and keeps every line', async () => {
   const s = open({ 'POST /owner/supplies/bulk': new Error('line 1: a name of 1 to 80 characters') });
   s.type(0, 'Нова річ');
@@ -300,7 +336,7 @@ test('the write-off and prep picker: another spelling finds the position, and an
   p.box.querySelector('[data-srunit="unit"]').onclick();
   p.box.querySelector('[data-srkind="utensil"]').onclick();
   await p.box.querySelector('#srGo').onclick(); await tick();
-  assert.deepEqual(p.f.calls.map(c => [c[1], c[2].items]), [['/owner/supplies/bulk', [{ name: 'Палички бамбукові', unit: 'unit', kind: 'utensil' }]]]);
+  assert.deepEqual(p.f.calls.map(c => [c[1], c[2].items]), [['/owner/supplies/bulk', [{ name: 'Палички бамбукові', unit: 'unit', kind: 'utensil', notNear: [] }]]]);
   assert.deepEqual(got, ['rice', 'n1'], 'the new position goes straight to what the picker was opened for');
   assert.ok(ctx.data.supplies.some(s => s.id === 'n1' && s.kind === 'utensil'));
 });

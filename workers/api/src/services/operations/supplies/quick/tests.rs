@@ -160,3 +160,51 @@ fn a_typed_container_goes_on_a_recipe_and_a_sale_writes_it_off_by_id() {
     log.append_served_draws(&draws_for("till-2", &[(json!({ "id": "tea", "name": "Tea" }).to_string(), 4)])).unwrap();
     assert_eq!(log.ledger().unwrap().level(&id).on_hand, 95);
 }
+
+
+#[test]
+fn a_near_name_agrees_with_the_console_on_every_shared_case() {
+    let (near, apart) = (pairs("near"), pairs("apart"));
+    assert!(near.len() >= 12 && apart.len() >= 10, "the list is read, not empty");
+    for (typed, name) in &near {
+        assert!(is_near(&key(typed), &key(name)), "{typed:?} ~ {name:?}");
+    }
+    for (typed, name) in &apart {
+        assert!(!is_near(&key(typed), &key(name)), "{typed:?} !~ {name:?}");
+    }
+}
+
+fn eggs() -> Vec<(String, String)> {
+    vec![("eggs".into(), json!({ "id": "eggs", "name": "Яйце", "unit": "unit" }).to_string())]
+}
+
+#[test]
+fn a_form_that_never_saw_the_near_name_is_asked_and_nothing_is_written() {
+    let a = plan(&[json!({ "name": "яйцо", "unit": "unit", "notNear": [] })], &eggs()).unwrap();
+    assert!(a.write.is_empty(), "a second position under another spelling");
+    assert_eq!(a.near.len(), 1);
+    assert_eq!((a.near[0].typed.as_str(), a.near[0].id.as_str(), a.near[0].name.as_str(), a.near[0].unit.as_str()), ("яйцо", "eggs", "Яйце", "unit"));
+}
+
+#[test]
+fn a_person_who_said_it_is_another_position_gets_it() {
+    let a = plan(&[json!({ "name": "яйцо", "unit": "unit", "notNear": ["eggs"] })], &eggs()).unwrap();
+    assert_eq!(a.write.len(), 1, "the answer is the person's");
+    assert!(a.near.is_empty());
+    assert!(a.write[0].1.get("notNear").is_none(), "the answer is not stored on the record");
+}
+
+#[test]
+fn a_list_without_the_question_is_written_as_before_and_a_retired_name_is_no_candidate() {
+    let a = plan(&[json!({ "name": "яйцо", "unit": "unit" })], &eggs()).unwrap();
+    assert_eq!((a.write.len(), a.near.len()), (1, 0), "a pasted list asks nobody");
+    let gone = vec![("eggs".into(), json!({ "id": "eggs", "name": "Яйце", "unit": "unit", "active": false }).to_string())];
+    let b = plan(&[json!({ "name": "яйцо", "unit": "unit", "notNear": [] })], &gone).unwrap();
+    assert_eq!((b.write.len(), b.near.len()), (1, 0));
+}
+
+#[test]
+fn two_lines_of_one_form_are_not_near_each_other() {
+    let a = plan(&[json!({ "name": "Судочок", "unit": "unit", "notNear": [] }), json!({ "name": "Судочки", "unit": "unit", "notNear": [] })], &[]).unwrap();
+    assert_eq!((a.write.len(), a.near.len()), (2, 0));
+}

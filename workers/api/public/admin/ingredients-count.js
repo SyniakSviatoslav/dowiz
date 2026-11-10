@@ -121,6 +121,7 @@ export function openDelivery(ctx){
         created = !!made;
         for (const x of news) {
           const sup = made.get(R.fold(x.got.name));
+          if (sup?.near) { x.L.f.ask(sup.near); x.got = null; say($('[data-dlerr]', x.L.el), t('sr_answer')); continue; }
           if (sup && !sup.retired) { x.L.f.pick(sup); x.got = { state: 'ok', sup }; say($('[data-dlerr]', x.L.el), ''); }
           else { x.got = null; say($('[data-dlerr]', x.L.el), t(sup ? 'sr_retired' : 'sr_noId')); }
         }

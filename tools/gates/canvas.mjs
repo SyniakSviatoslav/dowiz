@@ -225,6 +225,9 @@ async function ctxloss(b, base) {
 const CHECKS = { dom, frame, ctxloss };
 if (!CHECKS[check]) { console.log('usage: canvas.mjs <dom|frame|ctxloss> [--canvas-dir DIR] [--out FILE] [--dpr N]'); process.exit(2); }
 if (!existsSync(join(CANVAS, 'board.wasm'))) { console.log(`canvas: no board.wasm in ${CANVAS} -- build it (crates/dowiz-canvas/build.sh); NOT a pass`); process.exit(2); }
+// The fixed font set (canvas-fonts.conf): a machine's installed fonts must not move a first-frame number.
+const FONTS = join(dirname(fileURLToPath(import.meta.url)), 'canvas-fonts.conf');
+if (!existsSync(FONTS)) { console.log(`canvas: no font set at ${FONTS} -- NOT a pass`); process.exit(2); }
 const { chromium } = playwright();
 const srv = await serve();
 let browser, res;
@@ -232,7 +235,7 @@ try {
   // Fewer OS processes (no zygotes, GPU thread in the browser process, one renderer): on this box
   // Android's phantom-process killer SIGKILLs the whole gate when the box crosses 32 processes
   // (memory box-sigkill-phantom), and a default Chromium is ~8 of them.
-  browser = await chromium.launch({ headless: true, args: ['--no-sandbox', '--no-zygote', '--in-process-gpu', '--renderer-process-limit=1'] });
+  browser = await chromium.launch({ headless: true, env: { ...process.env, FONTCONFIG_FILE: FONTS }, args: ['--no-sandbox', '--no-zygote', '--in-process-gpu', '--renderer-process-limit=1'] });
   res = await CHECKS[check](browser, `http://127.0.0.1:${srv.address().port}`);
 } catch (e) {
   console.log(`canvas ${check}: harness failed -- ${String(e.message || e).split('\n')[0]} -- NOT a pass`);

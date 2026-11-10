@@ -12,6 +12,8 @@
 #   MEASURED on CI 2026-10-10 (run 38068929237, x86 ubuntu-latest): board 61.6 ms, reference 52.8 ms,
 #   board/ref 1.17 -> mark 106. The mark scales DOWN too (no floor at first_ms): with a floor CI held
 #   a 2x slower frame (~123 ms) to 300 and canvas-frame.prove went red.
+#   MEASURED 2026-11-10: 220 more system fonts took the same board from a median of 251-347 ms to 568-705 ms here;
+#   canvas.mjs now runs Chromium on the fixed set in canvas-fonts.conf.
 # cap: a reference past cap x nominal (450 ms) is a machine too slow to judge: exit 2, never a pass.
 first_ms=300
 ref_nominal_ms=150

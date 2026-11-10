@@ -28,6 +28,8 @@ import '/admin/menu-history-i18n.js'; // the history button's label (W-PITR)
 import { senseEditor, bindSenseEditor, senseEdits, rowSense } from '/admin/sense.js';
 import { tagLabel, undeclaredPanel, allergenMarkup, bindAllergens, allergenEdits, refusesSale, gateOn } from '/admin/menu-flags.js';
 import * as RL from '/admin/menu-recipe-logic.js';
+import * as SR from '/admin/supply-resolve.js';
+import { inlineNew } from '/admin/supply-resolve-field.js';
 import { syncDish, redrawWhenClosed } from '/admin/sync.js';
 /// W-NOM: the dishes ticked for a bulk delete (the owner's).
 const sel = selection();
@@ -593,10 +595,14 @@ async function bindRecipe(p){
     $('#rcBook').innerHTML = list.length ? shown.map(s => check({ cls: 'pick', data: { rs: s.id }, tour: 'recipe.pick', checked: picked.has(s.id),
       label: `${s.name} · ${s.category || ''} · ${s.unit}${isFoodKind(s.kind) && s.kcalPer100 == null ? ` · ${t('noData')}` : ''}` })).join('')
       + (list.length > shown.length ? `<p class="hint">${esc(t('rc_shown').replace('{n}', shown.length).replace('{total}', list.length))}</p>` : '') : `<p class="hint" data-t="${book.length ? 'none' : 'noStock'}"></p>`;
+    const typed = ($('#rcQ')?.value || '').trim();
+    if (SR.fold(typed) && !SR.resolve(typed, book).match) $('#rcBook').innerHTML += `<div id="rcNewBox">${btn({ id: 'rcNewGo', icon: 'plus', label: t('sr_addNew').replace('{name}', typed) })}</div>`;
     const ticked = () => { const n = RL.pickedOf(book, picked, recipeDraft).length; const box = $('#rcTicked'); if (box) box.textContent = n ? t('rc_ticked').replace('{n}', n) : ''; };
     for (const cb of $$('[data-rs]', $('#rcBook'))) cb.onchange = () => { RL.setPick(picked, cb.dataset.rs, cb.checked); ticked(); };
     ticked();
     retranslate($('#rcBook'));
+    const offer = $('#rcNewGo');
+    if (offer) offer.onclick = () => inlineNew($('#rcNewBox'), { data: { supplies: book } }, typed, sup => { RL.setPick(picked, sup.id, true); $('#rcQ').value = ''; drawBook(); });
   };
   $('#rcQ').oninput = drawBook;
   for (const b of $$('[data-rk]', $('#rcKinds'))) b.onclick = () => { kind = b.dataset.rk; press($$('[data-rk]', $('#rcKinds')), b); drawBook(); };
