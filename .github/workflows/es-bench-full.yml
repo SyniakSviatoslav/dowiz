@@ -31,7 +31,7 @@ jobs:
       VS: ${{ inputs.vs }}
       REPS: ${{ inputs.reps }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with: { toolchain: '1.96.1' }
       - name: The machine, as far as a guest can see it
@@ -48,7 +48,7 @@ jobs:
           ES_BENCH_COMMIT="$GITHUB_SHA" ES_BENCH_DIR="$RUNNER_TEMP/es-bench-data" \
             cargo run --release --locked --features competitors,mldsa -- full all "$N" "$VS" "$REPS" \
             | tee "$GITHUB_WORKSPACE/es-bench-full.txt"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: es-bench-full

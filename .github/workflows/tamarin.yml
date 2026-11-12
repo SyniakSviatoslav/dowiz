@@ -16,7 +16,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Install the prover
         shell: bash
         run: |
@@ -34,7 +34,7 @@ jobs:
         if: always()
         shell: bash
         run: python3 -I tools/gates/tamarin-verdicts.py tamarin.out --write tamarin.verdicts
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: tamarin-out
