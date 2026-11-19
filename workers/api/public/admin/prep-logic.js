@@ -110,7 +110,7 @@ export function body(state){
 }
 
 /// A short id from a name, as the supply form makes one.
-export const idOf = name => String(name || '').trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9а-яіїєґ]+/gi, '-').replace(/^-|-$/g, '');
+export { idOf } from './ingredients-calc.js';
 
 /// Where an item is used, as one line for a confirmation. `uses` is the
 /// hub's `{ preps: [{id,name}], dishes: [{id,name}] }` (or a map of them, by id).

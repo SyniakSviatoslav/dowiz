@@ -79,7 +79,16 @@ pub(crate) struct SupplyIn {
     /// it is on and of K, never a leaf of the write-off. `false` clears.
     #[serde(default)]
     pub(crate) untracked: Option<bool>,
+    /// The editor's emptied fields: each leaves the record. Absent keeps what
+    /// is stored, so without this an emptied price came back on every save.
+    #[serde(default)]
+    pub(crate) clear: Option<Vec<String>>,
 }
+
+/// The fields an emptied editor box removes; the rest have a default instead
+/// (an emptied category is sent as "", the minimum as 0).
+pub(crate) const CLEARABLE: [&str; 8] =
+    ["kcalPer100", "proteinPer100", "fatPer100", "carbsPer100", "costPerBasis", "weightPerUnit", "shelfDays", "supplier"];
 
 /// Code, barcode and packs: the nomenclature's own fields (W-NOM).
 pub mod nomenclature;
@@ -194,7 +203,30 @@ pub(crate) fn check(body: &SupplyIn) -> std::result::Result<String, String> {
         return Err("shelf life is 1 to 3650 days".into());
     }
     nomenclature::check(body)?;
+    for k in body.clear.iter().flatten() {
+        if !CLEARABLE.contains(&k.as_str()) {
+            return Err(format!("{k} cannot be cleared; clearable: {}", CLEARABLE.join(", ")));
+        }
+        if given(body, k) {
+            return Err(format!("{k} is both given and cleared"));
+        }
+    }
     Ok(id)
+}
+
+/// Does the body carry a value for the clearable field `k`?
+fn given(b: &SupplyIn, k: &str) -> bool {
+    match k {
+        "kcalPer100" => b.kcal_per100.is_some(),
+        "proteinPer100" => b.protein_per100.is_some(),
+        "fatPer100" => b.fat_per100.is_some(),
+        "carbsPer100" => b.carbs_per100.is_some(),
+        "costPerBasis" => b.cost_per_basis.is_some(),
+        "weightPerUnit" => b.weight_per_unit.is_some(),
+        "shelfDays" => b.shelf_days.is_some(),
+        "supplier" => b.supplier.is_some(),
+        _ => false,
+    }
 }
 
 /// The stored record: each field the body's value, else what was there, else
@@ -239,6 +271,10 @@ pub(crate) fn record(id: &str, body: &SupplyIn, existing: &Value) -> Value {
     });
     if let Some(m) = rec.as_object_mut() {
         m.retain(|k, v| !v.is_null() && !((k == "cleanPm" || k == "cookPm") && v == &json!(1000)) && !(k == "nutritionBasis" && v == "raw"));
+        // An emptied editor box: the stored value leaves (`check` allowed only these names).
+        for k in body.clear.iter().flatten().filter(|k| CLEARABLE.contains(&k.as_str())) {
+            m.remove(k.as_str());
+        }
     }
     rec
 }

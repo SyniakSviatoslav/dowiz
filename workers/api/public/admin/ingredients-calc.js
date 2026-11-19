@@ -166,6 +166,30 @@ export function priceBody(unit, priceTyped, mode){
 /// finer than the currency's smallest coin, or not a number, is null.
 export const priceMinor = parseMinor;
 
+/// A typed number: null when the box is empty, NaN when it does not read --
+/// never folded together, so a value nobody could read is refused, not
+/// dropped behind a "Saved". Spaces (a phone types a no-break one) group
+/// thousands; one comma or one dot is the decimal mark.
+export function numOf(v){
+  const s = String(v ?? '').trim().replace(/[\s   ]+/g, '');
+  if (!s) return null;
+  return /^\d+(?:[.,]\d+)?$/.test(s) ? Number(s.replace(',', '.')) : NaN;
+}
+
+/// The hub keeps an ingredient id to 64 bytes; a minted one stays under 60.
+export const ID_BYTES = 60;
+/// An id from a name: lower case, accents off, Latin and Ukrainian/Russian
+/// letters and digits, dashes between, cut on a letter's edge to fit
+/// [`ID_BYTES`] (a Cyrillic letter is two bytes). '' when nothing is left.
+export function idOf(name){
+  const slug = String(name ?? '').trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').normalize('NFC')
+    .replace(/[^a-z0-9а-яіїєґё]+/g, '-').replace(/^-|-$/g, '');
+  const enc = new TextEncoder();
+  let out = '';
+  for (const ch of slug) { if (enc.encode(out + ch).length > ID_BYTES) break; out += ch; }
+  return out.replace(/-+$/, '');
+}
+
 /// Measured yield of a prep, per mille of what went onto the board.
 export const yieldPm = (qty, out) => (qty > 0 && out != null ? Math.trunc(out * PM / qty) : null);
 

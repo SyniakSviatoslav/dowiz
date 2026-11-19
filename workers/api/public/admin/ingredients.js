@@ -55,6 +55,8 @@ export const WASTE_REASONS = ['spoiled', 'dropped', 'unsold', 'returned', 'staff
 const fail = e => toast(String(e.message || e));
 const perWord = u => t(u === 'unit' ? 'inv_perPiece' : u === 'ml' ? 'inv_perL' : 'inv_perKg');
 const when = ms => (ms ? `${day(ms)} ${clock(ms)}` : '-');
+/// The supply form's number boxes and the words that name them in a refusal.
+const fieldKey = { 's-low': 'minLevel', 's-kcal': 'kcal', 's-prot': 'protein', 's-fat': 'fat', 's-carb': 'carbs', 's-cost': 'costPer', 's-wpu': 'weightPerUnit', 's-shelf': 'inv_shelfDays', 's-clean': 'inv_cleanPct', 's-cook': 'inv_cookPct' };
 
 /// The card: levels, the four actions, losses, lots, prices, yields, movements.
 export function openCard(sup, ctx){
@@ -112,17 +114,32 @@ export function openSupply(sup, ctx, preset = {}){
   for (const b of $$('[data-kind]', $('#sheetIn'))) b.onclick = () => { k = b.dataset.kind; press($$('[data-kind]', $('#sheetIn')), b); $('#sFood').hidden = !isFood(k); };
   for (const b of $$('[data-nb]', $('#sheetIn'))) b.onclick = () => { nb = b.dataset.nb; press($$('[data-nb]', $('#sheetIn')), b); };
   $('#s-unit').onchange = e => { const u = e.target.value; $('#sWeight').hidden = u !== 'unit'; for (const el of $$('#sBasis, #s-cost-hint')) el.textContent = `${C.basisOf(u) === 1 ? '1' : '100'} ${u}`; };
-  if (!sup) $('#s-name').oninput = e => { $('#s-id').value = e.target.value.trim().toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9а-яіїєґ]+/gi, '-').replace(/^-|-$/g, ''); };
-  const num = v => { const s = String(v ?? '').trim(); if (!s) return null; const n = Number(s.replace(',', '.')); return Number.isFinite(n) ? n : null; };
+  if (!sup) $('#s-name').oninput = e => { $('#s-id').value = C.idOf(e.target.value); };
+  // A box that does not read is refused where it was typed, never dropped
+  // behind a "Saved"; an emptied box on an edit clears the stored value.
+  const clear = [];
+  const numIn = (f, kk, round) => {
+    const el = $('#' + f), v = C.numOf(el.value);
+    if (Number.isNaN(v)) { el.focus(); toast(`${t(fieldKey[f] || 'required')}: ${t('inv_badNumber')}`, { tone: 'danger' }); return false; }
+    if (v == null) { if (sup?.[kk] != null) clear.push(kk); return true; }
+    return round ? Math.round(v) : v;
+  };
   const read = async () => {
-    const id = $('#s-id').value.trim().toLowerCase().replace(/\s+/g, '-'); if (!id) { toast(t('required')); return null; }
+    clear.length = 0;
+    const id = (sup ? sup.id : C.idOf($('#s-id').value) || C.idOf($('#s-name').value));
+    if (!id) { $('#s-name').focus(); toast(`${t('name')}: ${t('required')}`, { tone: 'danger' }); return null; }
+    // A NEW ingredient never overwrites one the venue has under the same id.
+    if (!sup && (ctx.data?.supplies || []).some(s => s.id === id)) { $('#s-name').focus(); toast(`«${$('#s-name').value.trim() || id}» ${t('nom_exists')}`, { tone: 'danger' }); return null; }
     const body = { id, name: $('#s-name').value.trim() || id, unit: $('#s-unit').value, kind: k, category: R.canonCategory($('#s-cat').value, R.categoriesOf(ctx.data?.supplies)) };
-    const low = num($('#s-low').value); if (low != null) body.lowAt = Math.round(low);
-    if (isFood(k)) { for (const [f, kk] of [['s-kcal', 'kcalPer100'], ['s-prot', 'proteinPer100'], ['s-fat', 'fatPer100'], ['s-carb', 'carbsPer100']]) { const v = num($('#' + f).value); if (v != null) body[kk] = v; } body.nutritionConfirmed = $('#s-conf').checked; body.nutritionBasis = nb; }
-    const cost = num($('#s-cost').value); if (cost != null) body.costPerBasis = Math.round(cost);
-    const wpu = num($('#s-wpu').value); if (wpu != null) body.weightPerUnit = wpu;
-    for (const [f, kk] of [['s-clean', 'cleanPm'], ['s-cook', 'cookPm']]) { const pm = C.lossOfField($('#' + f).value, sup?.[kk]); if (pm === undefined) continue; if (pm == null) return void toast(t('required')); body[kk] = pm; }
-    const shelf = num($('#s-shelf').value); if (shelf != null) body.shelfDays = Math.round(shelf);
+    const set = (kk, v) => { if (v === false) return false; if (v !== true) body[kk] = v; return true; };
+    if (!set('lowAt', numIn('s-low', 'lowAt', true))) return null;
+    if (body.lowAt == null && clear.includes('lowAt')) { clear.splice(clear.indexOf('lowAt'), 1); body.lowAt = 0; }
+    if (isFood(k)) { for (const [f, kk] of [['s-kcal', 'kcalPer100'], ['s-prot', 'proteinPer100'], ['s-fat', 'fatPer100'], ['s-carb', 'carbsPer100']]) if (!set(kk, numIn(f, kk, false))) return null; body.nutritionConfirmed = $('#s-conf').checked; body.nutritionBasis = nb; }
+    if (!set('costPerBasis', numIn('s-cost', 'costPerBasis', true))) return null;
+    if (!set('weightPerUnit', numIn('s-wpu', 'weightPerUnit', false))) return null;
+    for (const [f, kk] of [['s-clean', 'cleanPm'], ['s-cook', 'cookPm']]) { const pm = C.lossOfField($('#' + f).value, sup?.[kk]); if (pm === undefined) continue; if (pm == null) { $('#' + f).focus(); toast(`${t(fieldKey[f])}: ${t('inv_badNumber')}`, { tone: 'danger' }); return null; } body[kk] = pm; }
+    if (!set('shelfDays', numIn('s-shelf', 'shelfDays', true))) return null;
+    if (clear.length) body.clear = clear.slice();
     body.code = $('#s-code').value.trim(); body.barcode = $('#s-bar').value.trim();
     const pk = readPacks(body.unit); if (pk.error) return void toast(t(pk.error)); body.packs = pk.packs;
     return body;

@@ -39,6 +39,8 @@ export function expOf(jwt) {
   return c && Number.isFinite(c.exp) ? c.exp : null;
 }
 export const roleOf = jwt => claimsOf(jwt)?.role ?? null;
+/// The venue the token was minted for (owner, staff, courier), or null.
+export const venueOf = jwt => claimsOf(jwt)?.active_location_id ?? null;
 
 /// Is it time to ask for a new token? An expired one is overdue, not exempt.
 export function dueToRenew(jwt, nowMs, ahead = RENEW_AHEAD_MS) {

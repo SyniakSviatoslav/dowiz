@@ -12,10 +12,12 @@ import { safeGet, safeSet } from '/store/storage.js';
 import { t, lang, LANGS, setLang, retranslate, intlLocale } from '/admin/i18n.js';
 import * as ui from '/lib/ui/index.js';
 import { btn, field, check } from '/admin/parts.js';
-import { createRenewer, roleOf, dueToRenew } from '/lib/session-logic.js';
+import { createRenewer, roleOf, venueOf, dueToRenew } from '/lib/session-logic.js';
 import * as Draft from '/lib/draft.js';
 import { DRAFT_WORDS } from '/lib/draft-words.js';
 import { fresh } from '/admin/fresh-logic.js';
+import * as Outcome from '/admin/outcome-logic.js';
+import '/admin/outcome-i18n.js';
 
 export const API = '/api';
 export const $ = (s, r = document) => r.querySelector(s);
@@ -77,18 +79,53 @@ const WRITES = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 /// One fetch wrapper so a 401 has exactly one meaning everywhere: the session is
 /// over. It tries a renewal once, then stops. A write that landed forgets the
 /// draft of the form whose button sent it.
-export async function api(path, opts = {}, retried = false){
+///
+/// EVERY WRITE A PERSON MAKES ENDS IN A NOTICE (`outcome-logic.js`): saved in
+/// green, or not saved in red with the reason. A screen's own notice, shown
+/// in the same turn, wins; a background call (no recent tap) says nothing.
+export async function api(path, opts = {}){
+  const tapped = globalThis.navigator?.userActivation?.isActive ?? true;
+  const tell = tapped && Outcome.announces(opts.method, path, opts);
+  try {
+    const out = await call(path, opts);
+    if (tell) announce({ ok: true });
+    return out;
+  } catch (e) {
+    if (tell && !e.sessionOver) announce(e.offline ? { ok: false, offline: true } : { ok: false, status: e.status, message: e.message });
+    throw e;
+  }
+}
+let shown = 0, outcome = null;
+const DANGER_MS = 7000;
+function announce(o){
+  const at = shown, n = Outcome.notice(o, t);
+  outcome = { ok: o.ok, raw: o.offline ? t('out_offline') : String(o.message ?? ''), n };
+  setTimeout(() => {
+    if (shown !== at) return;
+    toast(n.text, { tone: n.tone, icon: n.icon, ...(n.tone === 'danger' ? { ms: DANGER_MS } : {}) });
+  }, 0);
+}
+async function call(path, opts = {}, retried = false){
   const body = opts.body && typeof opts.body === 'object' && !(opts.body instanceof Blob) ? JSON.stringify(opts.body) : opts.body;
-  const r = await fetch(API + path, {
+  let r;
+  try {
+    r = await fetch(API + path, {
     ...opts, body,
     headers: { ...(body instanceof Blob ? {} : { 'content-type': 'application/json' }), ...(opts.headers || {}),
                ...(store.t ? { authorization: 'Bearer ' + store.t } : {}) },
-  });
-  if (r.status === 401 && store.t && !retried) {
-    const ok = await renew();
-    if (ok) return api(path, opts, true);
+    });
+  } catch (e) {
+    // No answer at all: the connection, never the hub's refusal.
+    const err = new Error(t('out_offline')); err.offline = true; err.cause = e; throw err;
   }
-  if (r.status === 401 && store.t) { logout({ expired: true }); throw new Error(t('sessionOver')); }
+  if (r.status === 401 && store.t && !retried) {
+    const was = store.loc;
+    const ok = await renew();
+    // The venue moved: the page is reloading onto it; this body names the old one.
+    if (ok && store.loc !== was) { const err = new Error(t('loading')); err.sessionOver = true; throw err; }
+    if (ok) return call(path, opts, true);
+  }
+  if (r.status === 401 && store.t) { logout({ expired: true }); const err = new Error(t('sessionOver')); err.sessionOver = true; throw err; }
   // A write that landed: the draft of its form is forgotten, and EVERY cache
   // the console keeps is stale (W-TZFRESH, TZ 6: the shelf, the review set,
   // the categories re-read on their next ask -- no F5, no sixty-second wait).
@@ -114,8 +151,20 @@ async function refresh(){
     if (!r.ok) return false;
     const d = await r.json();
     store.t = d.access_token; if (d.refresh_token) store.r = d.refresh_token;
+    adoptVenue();
     return true;
   } catch { return false; }
+}
+/// THE VENUE IS THE TOKEN'S, NOT THE ONE REMEMBERED. A renewal asks the host,
+/// so an address that now opens another venue (one site, two addresses) hands
+/// back a token for that venue; every body built with the old id would be
+/// refused. The console reloads once onto the venue the token names.
+function adoptVenue(){
+  const v = venueOf(store.t);
+  if (!v || v === store.loc) return;
+  const was = store.loc;
+  store.loc = v;
+  if (was) location.reload();
 }
 /// A member of staff holds no refresh token: the still-valid bearer is the
 /// proof, and the hub slides their session (`POST /api/staff/refresh`).
@@ -124,7 +173,7 @@ async function renewStaff(){
     const r = await fetch(API + '/staff/refresh', { method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + store.t }, body: '{}' });
     if (!r.ok) return false;
     const d = await r.json();
-    if (d.jwt) store.t = d.jwt;
+    if (d.jwt) { store.t = d.jwt; adoptVenue(); }
     return !!d.jwt;
   } catch { return false; }
 }
@@ -194,6 +243,14 @@ export const day = ms => new Date(ms).toLocaleDateString(intlLocale(), { day: 'n
 // One polite live region (`#toast` in index.html, `ui-toast`), one toaster.
 let toaster = null;
 export function toast(m, o = {}){
+  shown++;
+  // A screen's own words right after a write carry that write's colour.
+  if (outcome && !o.tone) {
+    o = { ...o, tone: outcome.ok ? 'success' : 'danger', ...(outcome.ok ? {} : { ms: DANGER_MS, icon: outcome.n.icon }) };
+    // The hub's bare words, passed on by a screen, become the whole notice: not saved, why, and those words.
+    if (!outcome.ok && String(m ?? '').trim() === outcome.raw.trim()) m = outcome.n.text;
+  }
+  outcome = null;
   toaster = toaster || ui.createToaster($('#toast'));
   toaster.show(String(m ?? ''), o);
 }

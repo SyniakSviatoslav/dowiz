@@ -37,6 +37,31 @@ fn a_field_the_body_does_not_carry_keeps_what_was_there() {
     assert_eq!((r["name"].clone(), r["unit"].clone(), r["kind"].clone()), (json!("rice"), json!("g"), json!("food_ingredient")));
 }
 
+/// An emptied field in the editor is sent in `clear` and leaves the record;
+/// absent still keeps what was there. A name outside the clearable set, or a
+/// field both given and cleared, is refused before anything is written.
+#[test]
+fn a_cleared_field_leaves_the_record_and_an_unclearable_one_is_refused() {
+    let old = json!({ "id": "salmon", "name": "Salmon", "unit": "g", "costPerBasis": 240, "kcalPer100": 208, "shelfDays": 3, "weightPerUnit": 12.0 });
+    let mut b = body("salmon");
+    b.clear = Some(vec!["costPerBasis".into(), "kcalPer100".into(), "shelfDays".into()]);
+    assert_eq!(check(&b), Ok("salmon".to_string()));
+    let r = record("salmon", &b, &old);
+    assert_eq!((r["costPerBasis"].clone(), r["kcalPer100"].clone(), r["shelfDays"].clone()), (Value::Null, Value::Null, Value::Null));
+    assert!(r.as_object().unwrap().get("costPerBasis").is_none(), "left out, not stored as null");
+    // TWIN: what is not cleared stays.
+    assert_eq!(r["weightPerUnit"], json!(12.0));
+    for bad in ["id", "name", "unit", "kind", "active", "nope"] {
+        let mut b = body("salmon");
+        b.clear = Some(vec![bad.into()]);
+        assert!(check(&b).is_err(), "{bad} cannot be cleared");
+    }
+    let mut b = body("salmon");
+    b.cost_per_basis = Some(5);
+    b.clear = Some(vec!["costPerBasis".into()]);
+    assert!(check(&b).is_err(), "given and cleared at once");
+}
+
 /// AUDIT D35: the form may not change what a supply is counted in; the CSV
 /// importer already refused it. The twins: the same unit, no unit in the
 /// body, and a brand-new supply are all allowed.

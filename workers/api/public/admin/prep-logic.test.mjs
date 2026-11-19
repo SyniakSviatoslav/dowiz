@@ -62,6 +62,9 @@ test('the body names the card as the hub takes it; the id follows the name', () 
   // The supply form's own rule (ingredients.js): NFD strips the breve of a Cyrillic й too, as it always has.
   assert.equal(P.idOf('Рис заправлений  готовий'), 'рис-заправлении-готовии');
   assert.equal(P.idOf('Mitsukan dressing!'), 'mitsukan-dressing');
+  // A long Ukrainian name fits the hub's 64-byte id (two bytes a letter).
+  const long = P.idOf('Рис заправлений готовий для роллів з оцтом і цукром');
+  assert.ok(new TextEncoder().encode(long).length <= 60 && long.length > 20, long);
 });
 
 test('where used reads as one line, from one answer or many', () => {

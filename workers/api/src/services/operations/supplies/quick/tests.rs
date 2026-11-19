@@ -29,6 +29,25 @@ fn names_become_ingredients_with_their_unit_and_group() {
     assert_eq!(a.write[0].1["name"], "Rice", "the name is kept as typed, trimmed");
 }
 
+/// A long Ukrainian name is 2 bytes a letter: its minted id is cut to fit the
+/// 64-byte id on a letter's edge, tail included, and the list is written.
+#[test]
+fn a_long_cyrillic_name_gets_an_id_that_fits_and_is_written() {
+    let long = "Лосось охолоджений філе преміум якість від постачальника";
+    let items = vec![json!({ "name": long })];
+    let a = plan(&items, &stored()).unwrap();
+    let (id, rec) = &a.write[0];
+    assert!(id.len() <= 64 && id.len() > 40, "{id} is {} bytes", id.len());
+    assert!(long.to_lowercase().replace(' ', "-").starts_with(id.as_str()), "{id}");
+    assert_eq!(rec["name"], long);
+    // The cut id held by another name: the tail is added and it still fits.
+    let mut have = stored();
+    have.push((id.clone(), json!({ "id": id, "name": "Zzz", "unit": "g" }).to_string()));
+    let b = plan(&items, &have).unwrap();
+    let id2 = &b.write[0].0;
+    assert!(id2.len() <= 64 && id2 != id, "{id2} is {} bytes", id2.len());
+}
+
 #[test]
 fn one_bad_line_refuses_the_list_and_its_twin_passes() {
     for bad in [json!({ "name": "" }), json!({ "name": "X", "unit": "kg" }), json!({ "name": "X", "barcode": "12" }),

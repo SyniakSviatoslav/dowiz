@@ -3,7 +3,7 @@
 // asks once, only while the page is visible, with injected clock and timers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { claimsOf, expOf, roleOf, dueToRenew, createRenewer, RENEW_AHEAD_MS, RENEW_EVERY_MS } from './session-logic.js';
+import { claimsOf, expOf, roleOf, venueOf, dueToRenew, createRenewer, RENEW_AHEAD_MS, RENEW_EVERY_MS } from './session-logic.js';
 
 const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url');
 const jwt = (claims) => `${b64({ alg: 'HS256', typ: 'JWT', kid: 'v1' })}.${b64(claims)}.sig`;
@@ -19,6 +19,12 @@ test('the claims are read from the token without trusting them for anything but 
     assert.equal(claimsOf(bad), null, String(bad));
     assert.equal(expOf(bad), null, String(bad));
   }
+});
+
+test('the venue a token was minted for is read from it, and none from anything else', () => {
+  assert.equal(venueOf(jwt({ role: 'owner', active_location_id: 'dubin-durres', exp: T0 })), 'dubin-durres');
+  assert.equal(venueOf(jwt({ role: 'owner', exp: T0 })), null, 'a platform admin names no venue');
+  for (const bad of [null, '', 'a.b']) assert.equal(venueOf(bad), null, String(bad));
 });
 
 test('a token is due inside the two-hour window, and an expired one is due too', () => {

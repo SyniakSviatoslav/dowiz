@@ -47,14 +47,17 @@ fn free_id(taken: impl Fn(&str) -> bool, name: &str, wanted: Option<&str>) -> Op
         Some(w) => dowiz_hub::import::slug(w),
         None => dowiz_hub::import::slug(name),
     };
-    let base: String = base.chars().take(ID_MAX).collect();
-    if base.is_empty() {
+    // IN BYTES, tail included: every reader of a dish id allows 64 bytes, and a
+    // Cyrillic letter is two (a cut by letters minted 100-byte ids).
+    let fit = |tail: &str| format!("{}{tail}", crate::services::operations::supplies::quick::fit(&base, ID_MAX - tail.len()));
+    let first = fit("");
+    if first.is_empty() {
         return None;
     }
-    if !taken(&base) {
-        return Some(base);
+    if !taken(&first) {
+        return Some(first);
     }
-    (2..=ID_TAIL_TRIES).map(|n| format!("{base}-{n}")).find(|c| !taken(c))
+    (2..=ID_TAIL_TRIES).map(|n| fit(&format!("-{n}"))).find(|c| !taken(c))
 }
 
 #[derive(Deserialize)]
@@ -281,5 +284,17 @@ mod tests {
         // A name with nothing alphanumeric still gets the importer's fallback id.
         assert_eq!(free_id(|_| false, "!!!", None).as_deref(), Some("item"));
         assert_eq!(free_id(|_| false, "x", Some("my-id")).as_deref(), Some("my-id"));
+    }
+
+    /// A long Ukrainian dish name is two bytes a letter: its id, tail included,
+    /// stays within the 64 bytes every reader of a dish id allows.
+    #[test]
+    fn a_long_cyrillic_name_gets_an_id_within_64_bytes_with_its_tail() {
+        let name = "Рол Філадельфія з лососем і вершковим сиром та огірком";
+        let id = free_id(|_| false, name, None).unwrap();
+        assert!(id.len() <= 64 && id.len() > 40, "{id} is {} bytes", id.len());
+        let taken = |c: &str| c == id;
+        let id2 = free_id(taken, name, None).unwrap();
+        assert!(id2.len() <= 64 && id2 != id, "{id2} is {} bytes", id2.len());
     }
 }

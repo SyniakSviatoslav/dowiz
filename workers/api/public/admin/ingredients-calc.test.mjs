@@ -123,6 +123,29 @@ test('an emptied loss field takes the loss off the card', () => {
   assert.equal(C.lossOfField('abc', 700), null);
 });
 
+test('a typed number reads with spaces and a comma, and an unreadable one is told apart from an empty one', () => {
+  assert.equal(C.numOf(''), null);
+  assert.equal(C.numOf('   '), null);
+  assert.equal(C.numOf('1 200'), 1200);
+  assert.equal(C.numOf('1 200'), 1200, 'a no-break space as a phone keyboard types it');
+  assert.equal(C.numOf('1 200,5'), 1200.5);
+  assert.equal(C.numOf('20,5'), 20.5);
+  assert.equal(C.numOf('0.25'), 0.25);
+  for (const bad of ['abc', '12 kg', '1,2,3', '1.200,50', '--1', '1e3', 'Infinity']) assert.ok(Number.isNaN(C.numOf(bad)), bad);
+});
+
+test('an id made from a name fits the hub\'s 64 bytes on a letter\'s edge', () => {
+  const enc = s => new TextEncoder().encode(s).length;
+  assert.equal(C.idOf('Salmon fillet'), 'salmon-fillet');
+  assert.equal(C.idOf('Djathë i bardhë'), 'djathe-i-bardhe');
+  assert.equal(C.idOf('Сир Філадельфія'), 'сир-філадельфія');
+  const long = C.idOf('Лосось охолоджений філе преміум якість від постачальника');
+  assert.ok(enc(long) <= 60 && enc(long) > 40, `${long} is ${enc(long)} bytes`);
+  assert.ok('лосось-охолоджении-філе-преміум-якість-від-постачальника'.startsWith(long), long);
+  assert.ok(!long.endsWith('-'), 'no dash left at the cut');
+  assert.equal(C.idOf('🍣 !!'), '', 'nothing to make an id of: the form asks for one');
+});
+
 test('a delivery price is read in the currency of the venue', () => {
   assert.equal(C.priceMinor('1 500', 0), 1500);
   assert.equal(C.priceMinor('12', 2), 1200);
