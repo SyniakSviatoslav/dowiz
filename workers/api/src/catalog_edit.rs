@@ -49,7 +49,7 @@ fn free_id(taken: impl Fn(&str) -> bool, name: &str, wanted: Option<&str>) -> Op
     };
     // IN BYTES, tail included: every reader of a dish id allows 64 bytes, and a
     // Cyrillic letter is two (a cut by letters minted 100-byte ids).
-    let fit = |tail: &str| format!("{}{tail}", crate::services::operations::supplies::quick::fit(&base, ID_MAX - tail.len()));
+    let fit = |tail: &str| format!("{}{tail}", crate::services::operations::supplies::ids::fit(&base, ID_MAX - tail.len()));
     let first = fit("");
     if first.is_empty() {
         return None;

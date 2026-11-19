@@ -109,23 +109,6 @@ pub fn fold(s: &str) -> String {
     out
 }
 
-/// A minted id's base, in BYTES: the id is 64 bytes at most (`check`) and a
-/// tail ("-99") must still fit. A Cyrillic letter is two bytes, so a cut by
-/// letters let a long Ukrainian name past 64 and the whole list was refused.
-const ID_BASE_BYTES: usize = 60;
-
-/// `s` cut to `max` bytes on a letter's edge, with no dash left at the cut.
-pub(crate) fn fit(s: &str, max: usize) -> String {
-    let mut end = 0;
-    for (i, c) in s.char_indices() {
-        if i + c.len_utf8() > max {
-            break;
-        }
-        end = i + c.len_utf8();
-    }
-    s[..end].trim_end_matches('-').to_string()
-}
-
 /// What a name is compared by: its fold, or (a name of signs only) itself.
 fn key(name: &str) -> String {
     let f = fold(name);
@@ -242,7 +225,7 @@ pub fn plan(items: &[Value], stored: &[(String, String)]) -> std::result::Result
                 continue;
             }
         }
-        let base = fit(&dowiz_hub::import::slug(&name), ID_BASE_BYTES);
+        let base = super::ids::fit(&dowiz_hub::import::slug(&name), super::ids::ID_BASE_BYTES);
         let Some(id) = std::iter::once(base.clone()).chain((2..=TAILS).map(|n| format!("{base}-{n}"))).find(|c| !ids.contains(c)) else {
             return Err(format!("line {}: no id is free for {name}", i + 1));
         };

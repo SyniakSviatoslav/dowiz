@@ -181,11 +181,8 @@ impl Place {
     /// customer's request carries no token and therefore no id, and guessing
     /// that the slug IS the id is exactly the drift described above.
     pub async fn of_slug(ctx: &RouteContext<crate::Req>, slug: &str) -> Result<Self> {
-        struct Row {
-            id: String,
-        }
-        // One site, several addresses: a path naming an alias reaches its target.
-        let slug = &aliases::target(&aliases::spec(&ctx.env), slug);
+        struct Row { id: String }
+        let slug = &aliases::target(&aliases::spec(&ctx.env), slug); // one site, several addresses
         // A4 (W-CHEAP): an identity answer already learned skips the platform object (`slugs`).
         if let Some(venue) = slugs::known(&ctx.env, slug).await {
             return Ok(Place { ns: ctx.durable_object("HUB")?, venue, edit: Edited::now(ctx) });
@@ -281,8 +278,7 @@ impl Place {
         if sub.is_empty() || sub.contains('.') || sub == "www" {
             return None;
         }
-        // One site, several addresses: the slug this address opens (`aliases`).
-        Some(aliases::target(&aliases::spec(&ctx.env), sub))
+        Some(aliases::target(&aliases::spec(&ctx.env), sub)) // the slug this address opens
     }
 
     // `is_platform_host` WAS HERE and had no caller: the platform routes reach
