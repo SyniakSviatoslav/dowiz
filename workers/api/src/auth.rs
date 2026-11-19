@@ -259,6 +259,17 @@ pub fn verify(env: &Env, token: &str, now_ms: i64) -> std::result::Result<Claims
     if claims.exp() <= now_ms {
         return Err(AuthError::Expired);
     }
+    // A VENUE THAT NOW OPENS AT ANOTHER ADDRESS (`hubstore::aliases`): its
+    // console, staff and courier sessions sign in again and land on the venue
+    // the address opens. A guest's order token is kept: its order lives here.
+    let venue = match &claims {
+        Claims::Owner { active_location_id, .. } => active_location_id.as_deref(),
+        Claims::Courier { active_location_id, .. } | Claims::Staff { active_location_id, .. } => Some(active_location_id.as_str()),
+        Claims::Customer { .. } => None,
+    };
+    if venue.is_some_and(|v| crate::hubstore::aliases::retired(&crate::hubstore::aliases::spec(env), v)) {
+        return Err(AuthError::Revoked("this venue now opens at another address: sign in again"));
+    }
     Ok(claims)
 }
 

@@ -58,6 +58,11 @@ PLATFORM_HOST = "dowiz.org"
 # flip, roll back to a build that reads sha256 (tools/deploy/rollback.sh refuses
 # the others). Flipped by the operator, qa-durres first, then "*".
 SHA256_VENUES = ""
+# ONE SITE, SEVERAL ADDRESSES (`src/hubstore/aliases.rs`): `from=to` slugs, comma-separated.
+# The address and public paths of `from` open the venue of `to`; sessions minted for the venue
+# `from` used to name are refused once, so every console signs in again onto the one database.
+# sushi-durres.dowiz.org and dubin-sushi.dowiz.org are one restaurant; dubin-durres holds its data.
+SLUG_ALIASES = "sushi-durres=dubin-sushi"
 # `LEGACY_VENUE` WAS HERE, and it is gone with the rows it named. It scoped the
 # `hub_image` seed to the one venue that predated the Durable Objects; the D1
 # binding, the migrations and `do_image`'s fallback have all been deleted, so

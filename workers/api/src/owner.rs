@@ -43,6 +43,10 @@ pub(crate) async fn owner_at(
     ctx: &RouteContext<crate::Req>,
     location_id: &str,
 ) -> std::result::Result<String, Response> {
+    // A body naming a venue that now opens at another address: sign in again.
+    if crate::hubstore::aliases::retired(&crate::hubstore::aliases::spec(&ctx.env), location_id) {
+        return Err(crate::hubstore::aliases::refusal());
+    }
     let raw = match auth::bearer(req) {
         Ok(r) => r,
         Err(e) => return Err(e.into_response().unwrap()),
@@ -152,6 +156,9 @@ pub(crate) async fn owner_and_venue(
     // not their venue's. The console always sends the parameter, which is why
     // this survived; anything else calling the API did not.
     let wanted = location_of(req).or(active_location_id);
+    if wanted.as_deref().is_some_and(|w| crate::hubstore::aliases::retired(&crate::hubstore::aliases::spec(&ctx.env), w)) {
+        return Err(crate::hubstore::aliases::refusal());
+    }
     // THE JOIN IS GONE AND WITH IT THE SECOND TABLE. `locations JOIN
     // memberships` existed to prove the venue exists AND that this person owns
     // it; the membership record only exists for a venue that does, so the

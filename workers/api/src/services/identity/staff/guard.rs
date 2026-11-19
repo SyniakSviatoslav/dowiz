@@ -86,6 +86,9 @@ pub(crate) async fn staff_venue_as(
     };
     let venue = staff_venue_of(crate::owner::location_of(req), &claim)
         .ok_or_else(|| Response::error("which venue?", 400).unwrap())?;
+    if crate::hubstore::aliases::retired(&crate::hubstore::aliases::spec(&ctx.env), &venue) {
+        return Err(crate::hubstore::aliases::refusal());
+    }
     let p = auth::authenticate(req, &ctx.env, ctx.data.now_ms)
         .await
         .map_err(|e| e.into_response().unwrap())?;

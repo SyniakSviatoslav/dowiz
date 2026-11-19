@@ -184,6 +184,8 @@ impl Place {
         struct Row {
             id: String,
         }
+        // One site, several addresses: a path naming an alias reaches its target.
+        let slug = &aliases::target(&aliases::spec(&ctx.env), slug);
         // A4 (W-CHEAP): an identity answer already learned skips the platform object (`slugs`).
         if let Some(venue) = slugs::known(&ctx.env, slug).await {
             return Ok(Place { ns: ctx.durable_object("HUB")?, venue, edit: Edited::now(ctx) });
@@ -279,7 +281,8 @@ impl Place {
         if sub.is_empty() || sub.contains('.') || sub == "www" {
             return None;
         }
-        Some(sub.to_string())
+        // One site, several addresses: the slug this address opens (`aliases`).
+        Some(aliases::target(&aliases::spec(&ctx.env), sub))
     }
 
     // `is_platform_host` WAS HERE and had no caller: the platform routes reach
@@ -998,6 +1001,7 @@ pub async fn append_blind(
 // `hubstore/append.rs`.
 mod append;
 pub mod slugs; // A4: slug -> venue without the platform object (W-CHEAP)
+pub mod aliases; // one site, several addresses (`SLUG_ALIASES`)
 pub use append::{append_claimed, append_for};
 
 /// ── ROTATION: A BOUNDED HOT LOG WITH COLD HISTORY ──
