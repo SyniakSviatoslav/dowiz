@@ -2,7 +2,7 @@
 // sign-in, staff made through the product's own invite + claim, the courier's credential, and the
 // soft check that records a failure and lets the cycle go on (one product defect must not hide the rest).
 import { HOST, LOC, RUN, OUT, S, save, Fail, api, own, courierCreds, creds } from './lib.mjs';
-import { go, routeLocal, guard, inspect, until } from './page.mjs';
+import { go, routeLocal, guard, inspect, until, LANG_TAKES_MS } from './page.mjs';
 
 export const rnd = a => a[Math.floor(Math.random() * a.length)];
 export const randPhone = () => `+35569${String(1000000 + Math.floor(Math.random() * 8999999))}`;
@@ -35,7 +35,7 @@ export async function setLang(p, L) {
   await p.click('#langBtn');
   if (!(await until(p, () => document.getElementById('sheet')?.dataset.name === 'lang', null, 8000))) throw new Fail('the language button opened no sheet');
   await p.click(`#sheetIn [data-l="${L}"]`);
-  if (!(await until(p, l => document.documentElement.lang === l, L, 8000))) throw new Fail(`language ${L} did not take`);
+  if (!(await until(p, l => document.documentElement.lang === l, L, LANG_TAKES_MS))) throw new Fail(`language ${L} did not take`);
   await p.waitForTimeout(1200);
   await closeSheet(p).catch(() => {});
 }

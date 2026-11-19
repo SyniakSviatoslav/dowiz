@@ -46,13 +46,20 @@ export function morph(change, { quick = false } = {}){
   const scale = quick ? 0.55 : 1;
   const done = [];
   let dealt = 0;
+  // Every card is measured after the change and before the first write: a
+  // measure after an animation or a style write lays the page out again, once
+  // per card. A leaving card goes out of flow, so it moves no other card.
+  const at = new Map();
+  for (const el of cards) {
+    if (el.hidden) { if (before.has(el)) at.set(el, el.parentElement.getBoundingClientRect()); }
+    else at.set(el, el.getBoundingClientRect());
+  }
   for (const el of cards) {
     const was = before.get(el);
     if (el.hidden) {
       if (!was) continue;
       // Scatter: shown again out of flow, exactly where it was, and dissolved.
-      const host = el.parentElement;
-      const hr = host.getBoundingClientRect();
+      const hr = at.get(el);
       el.hidden = false;
       el.classList.add('leaving');
       el.style.position = 'absolute';
@@ -69,7 +76,7 @@ export function morph(change, { quick = false } = {}){
       }));
       continue;
     }
-    const now = el.getBoundingClientRect();
+    const now = at.get(el);
     if (!near(now)) continue;
     if (was) {
       const dx = was.left - now.left, dy = was.top - now.top;
@@ -107,11 +114,17 @@ export async function relabel(swap){
   const before = new Map();
   for (const n of document.querySelectorAll(RELABEL_SELECTOR)) before.set(n, n.textContent);
   await swap();
+  // Every node is measured first, then every animation starts: a measure after
+  // an animation lays the whole page out again, once per node (8 s on a phone).
+  const turn = [];
   for (const [n, was] of before) {
     if (!n.isConnected || n.textContent === was) continue;
     const r = n.getBoundingClientRect();
     if (r.bottom < 0 || r.top > innerHeight || r.width === 0) continue;
-    const delay = Math.max(0, Math.min(1, r.top / innerHeight)) * RELABEL_WAVE_MS;
+    turn.push([n, r.top]);
+  }
+  for (const [n, top] of turn) {
+    const delay = Math.max(0, Math.min(1, top / innerHeight)) * RELABEL_WAVE_MS;
     n.animate([
       { opacity: 0, transform: `translateY(${RELABEL_RISE})`, filter: 'blur(3px)' },
       { opacity: 1, transform: 'translateY(0)', filter: 'blur(0)' },

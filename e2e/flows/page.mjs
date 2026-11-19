@@ -192,5 +192,11 @@ export async function shot(page, label) {
   try { await page.screenshot({ path: f }); return f; } catch (e) { return `(screenshot failed: ${String(e.message).slice(0, 80)})`; }
 }
 
+/// How long a language switch may take to reach `<html lang>`. The first use
+/// of a locale in a page makes Chromium look up that locale's fallback fonts
+/// through the host's fontconfig: 6-7 s per locale on this box with 330 fonts
+/// under proot, tens of ms once seen. The bound is the host's, not the page's.
+export const LANG_TAKES_MS = 25000;
+
 /// Wait for a condition on the page, bounded; answers whether it came true.
 export const until = (page, fn, arg, ms = 20000) => page.waitForFunction(fn, arg, { timeout: ms, polling: 250 }).then(() => true, () => false);

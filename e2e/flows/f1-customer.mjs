@@ -8,7 +8,7 @@
 // No dish on qa-durres has a modifier group; the flow says so from the API
 // rather than pretending to have tested one.
 import { HOST, LOC, RUN, S, save, Fail, api, own, menu, dishes, opened, statusOf } from './lib.mjs';
-import { launch, go, PHONE, routeLocal, localServed, guard, clean, inspect, shot, until } from './page.mjs';
+import { launch, go, PHONE, routeLocal, localServed, guard, clean, inspect, shot, until, LANG_TAKES_MS } from './page.mjs';
 
 const sheetName = p => p.evaluate(() => document.getElementById('sheet')?.dataset.name || '');
 
@@ -141,7 +141,7 @@ export async function f1(log) {
       const btn = await p.$(`#sheetIn [data-l="${L}"]`);
       if (!btn) throw new Fail(`the language sheet offers no ${L}`);
       await btn.click();
-      if (!(await until(p, l => document.documentElement.lang === l, L, 8000))) throw new Fail(`choosing ${L}: <html lang> stayed ${await p.evaluate(() => document.documentElement.lang)}`);
+      if (!(await until(p, l => document.documentElement.lang === l, L, LANG_TAKES_MS))) throw new Fail(`choosing ${L}: <html lang> stayed ${await p.evaluate(() => document.documentElement.lang)}`);
       await p.waitForTimeout(1500);
       await inspect(p, `F1 language ${L} sheet`);
       await closeSheet(p);
