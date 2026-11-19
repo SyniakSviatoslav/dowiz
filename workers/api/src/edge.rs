@@ -191,13 +191,22 @@ pub struct Ctx<D> {
 /// here -- a test's, or a command the venue's object runs (`hubdo/command.rs`).
 struct Params(Vec<(String, String)>);
 
+impl Params {
+    /// A path's `slug` is the slug its address opens (`hubstore::aliases::params`).
+    fn aliased(p: Vec<(String, String)>, env: &Env) -> Self {
+        Params(crate::hubstore::aliases::params(p, env))
+    }
+}
+
 impl<D: Clone> Ctx<D> {
     pub fn from_worker(ctx: worker::RouteContext<D>) -> Self {
         let params = params::NAMES
             .iter()
             .filter_map(|k| ctx.param(k).map(|v| (k.to_string(), params::decoded(v))))
             .collect();
-        Ctx { data: ctx.data.clone(), env: Env::Live(ctx.env.clone()), params: Params(params) }
+        let env = Env::Live(ctx.env.clone());
+        let params = Params::aliased(params, &env);
+        Ctx { data: ctx.data.clone(), env, params }
     }
 }
 
@@ -209,7 +218,8 @@ impl<D> Ctx<D> {
     /// A context whose path parameters are given rather than matched by the router.
     pub fn given(data: D, env: Env, params: &[(&str, &str)]) -> Self {
         let params = params.iter().map(|(k, v)| (k.to_string(), v.to_string())).collect();
-        Ctx { data, env, params: Params(params) }
+        let params = Params::aliased(params, &env);
+        Ctx { data, env, params }
     }
     pub fn param(&self, key: &str) -> Option<&String> {
         self.params.0.iter().find(|(k, _)| k == key).map(|(_, v)| v)

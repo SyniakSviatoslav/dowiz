@@ -37,6 +37,18 @@ pub fn refusal() -> crate::wire::Reply {
     crate::wire::Reply::error("this venue now opens at another address: sign in again", 401).unwrap()
 }
 
+/// A path's parameters with its `slug` replaced by the slug its address opens:
+/// every handler that reads the path's slug, not only `Place::of_slug`, sees
+/// one site. A menu handler passed the alias on to the venue's object, which
+/// answered 404, while only `of_slug` knew it.
+pub fn params(mut p: Vec<(String, String)>, env: &crate::edge::Env) -> Vec<(String, String)> {
+    let spec = spec(env);
+    for (_, v) in p.iter_mut().filter(|(k, _)| k == "slug") {
+        *v = target(&spec, v);
+    }
+    p
+}
+
 /// The deployment's spec (`SLUG_ALIASES`), or none.
 pub fn spec(env: &crate::edge::Env) -> String {
     env.var("SLUG_ALIASES").map(|v| v.to_string()).unwrap_or_default()
