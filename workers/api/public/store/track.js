@@ -19,7 +19,7 @@
 import { state, tokenFor, moneyEl, on, API } from '/store/state.js';
 import { t, lang, intlLocale } from '/store/i18n.js';
 import { scriptLang } from '../lib/langs.js';
-import { $, $$, esc, icon, sheet, closeSheet, toast, whenSheetCloses, stars } from '/store/ui.js';
+import { $, $$, esc, icon, sheet, closeSheet, toast, whenSheetCloses, stars, refused, refusal, landed, BAD } from '/store/ui.js';
 import { openOcean, phaseOf, seaRest } from '/store/sea.js';
 import * as trackMap from '/store/track-map.js';
 import { billMarkup, mountBill } from '/store/table.js';
@@ -100,9 +100,10 @@ function bindSay(order){
       const r = await fetch(`${API}/order/${encodeURIComponent(order.id)}/feedback`, {
         method: 'POST', headers: { 'content-type': 'application/json', ...(tok ? { authorization: 'Bearer ' + tok } : {}) },
         body: JSON.stringify({ text }) });
-      const d = await bodyOf(r); if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
+      const d = await bodyOf(r); if (!r.ok) throw refusal(d.error || ('HTTP ' + r.status), r.status);
       openTracking({ ...order, feedback: { text } });
-    } catch (e) { go.disabled = false; toast(String(e.message || e)); }
+      landed();
+    } catch (e) { go.disabled = false; toast(refused(e), BAD); }
   };
 }
 

@@ -26,7 +26,7 @@
 // a cache under the old name would keep serving the old sheet offline.
 // Web Push (W-PUSH): the 'push' and 'notificationclick' handlers.
 importScripts('/lib/push-sw.js');
-const SHELL_CACHE = 'dowiz-courier-shell-2026-10-12-session';
+const SHELL_CACHE = 'dowiz-courier-shell-2026-11-20-notices';
 const SHELL = [
   '/courier/',
   '/courier/app.js',

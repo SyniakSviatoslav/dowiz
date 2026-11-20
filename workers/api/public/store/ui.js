@@ -10,6 +10,7 @@
 import { t, retranslate } from '/store/i18n.js';
 import { repaintMoney, state } from '/store/state.js';
 import * as UI from '/lib/ui/index.js';
+import { notice } from '/lib/outcome-logic.js';
 
 // The design system speaks the storefront's words: a component given
 // `{ t:'key' }` renders `t(key)` and `data-t`, which retranslate() rewrites.
@@ -106,10 +107,20 @@ export function bindSheetChrome(){
 // the timer and the `hidden` state. Created on first use: the element is in
 // the document before any module runs, but a test page may not have it.
 let toaster = null;
-export function toast(msg){
+export function toast(msg, { tone, icon } = {}){
   if (!toaster) toaster = UI.createToaster($('#toast'), { ms: TOAST_MS });
-  toaster.show(msg);
+  toaster.show(msg, { tone, icon });
 }
+// EVERY WRITE A GUEST MAKES ENDS IN ONE NOTICE (`/lib/outcome-logic.js`, the
+// console's rule): green when it landed, red with the reason in the guest's
+// language and the hub's words beside it when it was refused.
+export const OK = { tone: 'success', icon: 'circle-check' };
+export const BAD = { tone: 'danger', icon: 'alert-circle' };
+/// `e.status` is the hub's refusal; an error with none never reached it (fetch threw).
+export const refused = e => notice({ ok: false, status: e?.status, message: e?.message ?? String(e), offline: e?.status == null }, t).text;
+/// The hub's refusal as an error that carries its status, for `refused`.
+export const refusal = (message, status) => Object.assign(new Error(message), { status });
+export const landed = () => toast(t('saved'), OK);
 
 // ── a dish with no photo ────────────────────────────────────────────────────
 // THE VENUE'S OWN MARK, not a grey rectangle and not a letter. A dish the

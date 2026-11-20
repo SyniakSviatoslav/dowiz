@@ -16,6 +16,7 @@
 import { safeGet, safeSet } from '/store/storage.js';
 import { LANGS, NAMES, pickLang } from '../lib/langs.js';
 import { RU } from './i18n-ru.js';
+import { WORDS } from '../lib/outcome-words.js';
 
 export const T = {
   sq: { ex_name:'p.sh. Arta', ex_note:'p.sh. pa qepë, ju lutem', ex_promo:'p.sh. SUSHI10', ex_say:'p.sh. peshku i freskët, dërgesa vonoi pak',
@@ -264,6 +265,8 @@ export const T = {
 };
 /// A language's own name, the same in every language's table (lib/langs.js).
 for (const l of LANGS) T[l].langs = NAMES;
+/// The words of a write's notice (`/lib/outcome-logic.js`), the console's copy.
+for (const [l, w] of Object.entries(WORDS)) if (T[l]) Object.assign(T[l], w);
 
 /// A choice made here wins; else the diner's browser languages on first visit; else Albanian.
 export let lang = pickLang([safeGet('dw_lang')], globalThis.navigator?.languages || [], 'sq');

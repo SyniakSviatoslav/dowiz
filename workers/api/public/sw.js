@@ -12,7 +12,7 @@
 
 // Web Push (W-PUSH): the 'push' and 'notificationclick' handlers.
 importScripts('/lib/push-sw.js');
-const SHELL_CACHE = 'dowiz-shell-2026-11-03-service-mode';
+const SHELL_CACHE = 'dowiz-shell-2026-11-20-notices';
 /// THE WHOLE MODULE GRAPH, not just its entry.
 ///
 /// This list used to hold the document, `/app.js` and the three stylesheets,
@@ -39,6 +39,8 @@ const SHELL_CACHE_MODULES = [
   '/store/booking-words.js',
   '/lib/money.js',
   '/lib/langs.js',
+  '/lib/outcome-logic.js',
+  '/lib/outcome-words.js',
   // `/store/sea.js` imports the generated vocabulary at parse time, and a
   // static import that is not in the shell is the exact failure the list above
   // describes: the shell caches, the module fails at link time, the page is

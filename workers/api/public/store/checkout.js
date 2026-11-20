@@ -17,7 +17,7 @@
 import { state, API, SLUG, cartLines, subtotal, lineUnit, saveCart, addresses, rememberAddress, forgetAddress, moneyEl, money, on, remember } from '/store/state.js';
 import { safeGet, safeSet } from '/store/storage.js';
 import { t, lang } from '/store/i18n.js';
-import { $, $$, esc, icon, sheet, closeSheet, toast, whenSheetCloses } from '/store/ui.js';
+import { $, $$, esc, icon, sheet, closeSheet, toast, whenSheetCloses, BAD } from '/store/ui.js';
 import { totalsBlock, refreshTotals, refreshBar, howBlock, wireHow, loadHall } from '/store/cart.js';
 import { hallTable, missing, fulfilmentBody, leavesTheBuilding, PICKUP } from '/store/how.js';
 import { quoteEta } from '/store/eta.js';
@@ -418,7 +418,7 @@ async function place(pay, wallet){
     remember(d);
     bagPlaced(d); // W-QR
     dispatchEvent(new Event('dw:ordered'));
-    if (d.payment_error) toast(String(d.payment_error));
+    if (d.payment_error) toast(String(d.payment_error), BAD);
     const { openTracking } = await import('/store/track.js');
     if (d.client_secret) return collectCard(d, openTracking);
     seaCalm(false);

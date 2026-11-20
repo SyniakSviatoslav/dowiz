@@ -15,7 +15,7 @@
 
 import { API } from '/store/state.js';
 import { t, intlLocale } from '/store/i18n.js';
-import { $, esc, toast } from '/store/ui.js';
+import { $, esc, toast, refused, refusal, BAD } from '/store/ui.js';
 import { ui, k } from '/store/parts.js';
 
 /// The hub's bound (`chat::store::MAX_CHARS`), said on the field too.
@@ -70,10 +70,10 @@ function draw(box, order, tok, d){
       const r = await fetch(`${API}/order/${encodeURIComponent(order.id)}/chat`, {
         method: 'POST', headers: { 'content-type': 'application/json', authorization: 'Bearer ' + tok },
         body: JSON.stringify({ text, clientId: clientId() }) });
-      if (!r.ok) throw new Error((await r.text().catch(() => '')) || ('HTTP ' + r.status));
+      if (!r.ok) throw refusal((await r.text().catch(() => '')) || ('HTTP ' + r.status), r.status);
       await mountChat(order, tok);
     } catch (e) {
-      toast(esc(String(e.message || e)));
+      toast(refused(e), BAD);
       if (go) go.disabled = false;
     }
   };

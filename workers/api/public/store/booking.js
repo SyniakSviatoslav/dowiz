@@ -30,7 +30,7 @@
 
 import { API, SLUG, state, hhmm } from '/store/state.js';
 import { t, lang, retranslate } from '/store/i18n.js';
-import { $, $$, esc, icon, sheet, sheetName, toast } from '/store/ui.js';
+import { $, $$, esc, icon, sheet, sheetName, toast, OK, BAD } from '/store/ui.js';
 // THE SLOT ARITHMETIC IS NOT IN THIS FILE. It reads no clock, so it can be
 // examined at a chosen instant -- `lib/booking-time.test.mjs` runs it in node
 // with no browser, which is the only way any of it was ever going to be tested.
@@ -334,7 +334,7 @@ async function commit() {
   const tb = tableOf(ui.pick);
   if (ui.minute === null || ui.sending) return;
   const errs = guestErrors(ui);
-  if (errs.length) { toast(errs.map(k => t(k)).join('. ')); $(errs[0] === 'bkNeedPhone' ? '#bk-phone' : '#bk-name')?.focus(); return; }
+  if (errs.length) { toast(errs.map(k => t(k)).join('. '), BAD); $(errs[0] === 'bkNeedPhone' ? '#bk-phone' : '#bk-name')?.focus(); return; }
   ui.sending = true; draw();
   const slotMin = slotOf(ui.day, ui.minute);
   // ONE KEY PER BOOKING, NOT PER TAP (audit D28, `requestKey`): kept while
@@ -354,7 +354,7 @@ async function commit() {
       safeSet('dw_name', ui.name.trim()); safeSet('dw_phone', ui.phone.trim());
       ui.rid = null;
       if (d.access_token) keepBooking({ id: d.id, t: d.access_token, slotMin, party: ui.party });
-      toast(t('bkSent'));
+      toast(t('bkSent'), OK);
       ui.pick = null; ui.sending = false;
       await openMine(d.id);
       return;
@@ -363,11 +363,11 @@ async function commit() {
     // the table it refused; replacing that with "booking failed" is how a
     // guest ends up retrying the one table they cannot have.
     const why = refusalText(text);
-    toast(why ? `${t('bkFail')}: ${why.slice(0, 160)}` : t('bkFail'));
+    toast(why ? `${t('bkFail')}: ${why.slice(0, 160)}` : t('bkFail'), BAD);
     // The floor moved under us if somebody else took it: ask again.
     if (r.status === 409) await loadPlan();
   } catch {
-    toast(t('bkFail'));
+    toast(t('bkFail'), BAD);
   } finally {
     if (ui.sending) { ui.sending = false; draw(); }
   }

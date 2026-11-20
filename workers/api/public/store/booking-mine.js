@@ -11,7 +11,7 @@
 
 import { API, SLUG, state, hhmm } from '/store/state.js';
 import { t } from '/store/i18n.js';
-import { $, $$, esc, icon, sheet, toast } from '/store/ui.js';
+import { $, $$, esc, icon, sheet, toast, refused, refusal, OK, BAD } from '/store/ui.js';
 import { safeGet, safeSet } from '/store/storage.js';
 import { offsetMinutes } from '/lib/booking-time.js';
 import { remember, forget, ofVenue, linkHash, parseHash, canCancel, refusalText, STATUS_KEY } from '/lib/booking-guest.js';
@@ -94,10 +94,10 @@ async function cancel(id, btn) {
       headers: { 'content-type': 'application/json', authorization: 'Bearer ' + b.t },
       body: JSON.stringify({ to: 'CANCELLED_BY_GUEST' }),
     });
-    if (!r.ok) throw new Error(refusalText(await r.text()));
-    toast(t('bkCancelled'));
+    if (!r.ok) throw refusal(refusalText(await r.text()), r.status);
+    toast(t('bkCancelled'), OK);
   } catch (e) {
-    toast(`${t('bkFail')}: ${String(e.message || e).slice(0, 160)}`);
+    toast(refused(e), BAD);
   }
   await openMine(id);
 }
