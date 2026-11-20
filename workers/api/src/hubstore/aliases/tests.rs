@@ -45,6 +45,33 @@ fn the_menu_at_an_alias_is_the_targets_menu() {
     assert_ne!(menu(&bare, "old").status_code(), 200);
 }
 
+/// A retired venue keeps no till link: its own alarm forgets it (and its password),
+/// so the till's sales stop landing in a venue no address opens. The venue the
+/// address opens keeps its link.
+#[test]
+fn a_retired_venue_forgets_its_till_link_and_the_target_keeps_its_own() {
+    use crate::edge::mem::block_on;
+    use crate::edge::site::Site;
+    let site = Site::with_env(&[], &[("SLUG_ALIASES", "old=alpha")]);
+    site.venue("old", "o@x.test");
+    site.venue("alpha", "a@x.test");
+    let env = site.env();
+    let place = |v: &str| crate::hubstore::Place { ns: env.durable_object("HUB").unwrap(), venue: v.into(), edit: Default::default() };
+    let link = serde_json::json!({"enabled": true, "pos_id": 1, "user": "till@x.test", "password": "pw"});
+    let config = |v: &str| -> serde_json::Value {
+        block_on(crate::command::send::<_, serde_json::Value>(&place(v), "ebills/status", &serde_json::json!({}))).unwrap()["config"].clone()
+    };
+    for v in ["old", "alpha"] {
+        block_on(crate::command::send::<_, serde_json::Value>(&place(v), "ebills/config", &link)).unwrap();
+        assert_eq!(config(v)["enabled"], serde_json::json!(true), "{v} linked");
+    }
+    block_on(crate::cron::run(&env, "old", site.now_ms + 60_000));
+    let old = config("old");
+    assert_ne!(old["enabled"], serde_json::json!(true), "the retired venue's link is off: {old}");
+    assert_eq!(old["secret_set"], serde_json::json!(false), "and its password is gone: {old}");
+    assert_eq!(config("alpha")["enabled"], serde_json::json!(true), "the venue the address opens keeps its link");
+}
+
 #[test]
 fn an_alias_to_itself_or_a_chain_is_not_followed() {
     assert_eq!(target("a=a", "a"), "a");

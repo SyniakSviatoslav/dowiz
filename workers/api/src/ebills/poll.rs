@@ -44,6 +44,8 @@ pub(crate) async fn tick_venue(env: &Env, venue: &str, now_ms: i64) {
                 return;
             }
         };
+        use crate::hubstore::aliases::{forget_till, retired, spec};
+        if plan.enabled && retired(&spec(env), &venue) { return forget_till(&place).await; }
         if !plan.enabled || !(plan.floor || plan.sales || plan.reread || plan.recheck) {
             return;
         }

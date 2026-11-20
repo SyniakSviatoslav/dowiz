@@ -49,6 +49,17 @@ pub fn params(mut p: Vec<(String, String)>, env: &crate::edge::Env) -> Vec<(Stri
     p
 }
 
+/// A retired venue's till link, forgotten with its password (the owner's
+/// "disconnect", `ebills::glue::apply_config`): the till's sales stop landing in
+/// a venue no address opens. Its owner can no longer reach it to do this.
+pub async fn forget_till(place: &crate::hubstore::Place) {
+    let off = serde_json::json!({ "enabled": false, "pos_id": 0, "user": "" });
+    match crate::command::send::<_, serde_json::Value>(place, "ebills/config", &off).await {
+        Ok(_) => log_line!("ebills {}: retired by an alias, its till link is forgotten", place.venue),
+        Err((s, m)) => log_error!("ebills {}: the retired venue's till link could not be forgotten: {s} {m}", place.venue),
+    }
+}
+
 /// The deployment's spec (`SLUG_ALIASES`), or none.
 pub fn spec(env: &crate::edge::Env) -> String {
     env.var("SLUG_ALIASES").map(|v| v.to_string()).unwrap_or_default()
