@@ -16,7 +16,7 @@ import { createRenewer, roleOf, venueOf, dueToRenew } from '/lib/session-logic.j
 import * as Draft from '/lib/draft.js';
 import { DRAFT_WORDS } from '/lib/draft-words.js';
 import { fresh } from '/admin/fresh-logic.js';
-import * as Outcome from '/admin/outcome-logic.js';
+import * as Outcome from '/lib/outcome-logic.js';
 import '/admin/outcome-i18n.js';
 
 export const API = '/api';

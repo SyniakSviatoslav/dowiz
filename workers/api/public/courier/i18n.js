@@ -8,6 +8,7 @@
 import { safeGet, safeSet } from '/store/storage.js';
 
 import { LANGS, pickLang, tagFor } from '../lib/langs.js';
+import { WORDS } from '../lib/outcome-words.js';
 
 export { LANGS };
 const STORAGE_KEY = 'dw_c_lang';
@@ -130,6 +131,8 @@ export const T = {
     learn: 'Уроки', learnNew: 'Новый', learnDone: 'Пройден', learnPaused: 'На паузе', learnWatch: 'Смотреть видео', learnWrites: 'меняет реальные данные', learnSteps: 'шагов: {n}', learnEmpty: 'Такой урок не найден', learnOffline: 'Для уроков нужен интернет', agent: 'AI-агент (MCP)',
   },
 };
+// The words of a tap's notice (`/lib/outcome-logic.js`), the console's copy.
+for (const [l, w] of Object.entries(WORDS)) if (T[l]) Object.assign(T[l], w);
 
 /// A choice made here wins; else the phone's own languages on first open; else Albanian.
 export let lang = pickLang([safeGet(STORAGE_KEY)], globalThis.navigator?.languages || [], 'sq');

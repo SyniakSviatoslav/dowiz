@@ -18,8 +18,9 @@ const SOURCES = ['app.js', 'screens.js', 'index.html', 'mcp.js'].map(f => [f, re
 // resolve; the table is loaded with that one import swapped for inert stubs.
 const I18N = read('i18n.js').replace(/^import \{ safeGet, safeSet \} from '\/store\/storage\.js';$/m,
   'const safeGet = () => null, safeSet = () => {};')
-  // A data: module has no base, so its one relative import is made absolute.
-  .replace("from '../lib/langs.js'", `from '${new URL('../lib/langs.js', HERE).href}'`);
+  // A data: module has no base, so its relative imports are made absolute.
+  .replace("from '../lib/langs.js'", `from '${new URL('../lib/langs.js', HERE).href}'`)
+  .replace("from '../lib/outcome-words.js'", `from '${new URL('../lib/outcome-words.js', HERE).href}'`);
 const { T } = await import('data:text/javascript;base64,' + Buffer.from(I18N).toString('base64'));
 useTranslator(k => `«${k}»`);
 

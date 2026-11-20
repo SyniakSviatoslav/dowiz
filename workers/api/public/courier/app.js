@@ -12,6 +12,7 @@ import { createGuide } from '/lib/guide.js';
 import { createLearn, loadLessons } from '/lib/learn.js';
 import { createOutbox, newKey } from '/lib/outbox.js';
 import { bodyOf } from '/lib/body.js';
+import { notice, unlessToasted } from '/lib/outcome-logic.js';
 import { t, lang, LANGS, setLang, nextLang, retranslate, intlLocale, voiceLocale } from '/courier/i18n.js';
 import { createRenewer, dueToRenew } from '/lib/session-logic.js';
 import * as Draft from '/lib/draft.js';
@@ -270,11 +271,17 @@ function ping(){
 // One toaster on the one host in index.html. The tone follows the icon the
 // call sites already pass, so none of them changed.
 const TOAST_TONE = { 'alert-circle':'danger', 'alert-triangle':'warning', 'circle-check':'success' };
-let toaster = null;
+let toaster = null, toasted = 0;
 function toast(m, ic = 'info-circle'){
   toaster ??= ui.createToaster($('#toast'));
+  toasted++;
   toaster.show(m, { icon: ic, tone: TOAST_TONE[ic] });
 }
+// EVERY TAP ENDS IN ONE NOTICE (`/lib/outcome-logic.js`, the console's rule):
+// a refusal says not saved and why, in the courier's language, with the hub's
+// words beside it; a landing says saved unless its screen said more in the turn.
+const refusedText = e => notice({ ok: false, status: e?.status, message: e?.message ?? String(e), offline: e?.offline }, t).text;
+const landedNotice = () => unlessToasted(() => toasted, () => toast(t('saved'), 'circle-check'));
 
 // `attend` marks a request the courier is waiting on: the spectral edge sweeps
 // while it is in flight. The GPS heartbeat and the 12s poll do not attend --
@@ -380,6 +387,7 @@ async function tapped(path, { body = null, tag } = {}){
   try {
     const data = await api(path, { method:'POST', attend:true, body,
                                    headers: { 'idempotency-key': key } });
+    landedNotice();
     return { landed: true, data };
   } catch (e) {
     if (!e.offline) throw e;
@@ -729,7 +737,7 @@ function render(){
       // "saved" reads as if the save failed too.
       if (r.landed) { seaEvent('courier_assigned', 60); await load(); }
     }
-    catch (e) { toast(String(e.message || e), 'alert-circle'); seaEvent('dispatch_failed', 40); b.disabled = false; }
+    catch (e) { toast(refusedText(e), 'alert-circle'); seaEvent('dispatch_failed', 40); b.disabled = false; }
   };
 }
 
@@ -945,7 +953,7 @@ function renderOffer(o){
       const r = await tapped(`/courier/orders/${encodeURIComponent(o.id)}/accept`, { tag:'accept:' + o.id });
       if (r.landed) { seaEvent('courier_assigned', 60); await load(); }
     } catch (e) {
-      toast(String(e.message || e), 'alert-circle');
+      toast(refusedText(e), 'alert-circle');
       seaEvent('dispatch_failed', 40);
       b.disabled = false;
     }
@@ -999,8 +1007,8 @@ async function openChat(o){
     const go = $('#chatSend'); if (go) go.disabled = true;
     try {
       await api(`/order/${encodeURIComponent(o.id)}/chat`, { method: 'POST', body: JSON.stringify({ text, clientId: newKey() }) });
-      await pollChat(); openChat(o);
-    } catch (e) { toast(String(e.message || e), 'alert-circle'); if (go) go.disabled = false; }
+      landedNotice(); await pollChat(); openChat(o);
+    } catch (e) { toast(refusedText(e), 'alert-circle'); if (go) go.disabled = false; }
   };
   if ($('#chatSend')) $('#chatSend').onclick = send;
   if ($('#chatText')) $('#chatText').onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); send(); } };
@@ -1033,7 +1041,7 @@ function renderActive(o){
     const restore = ui.setBusy($('#pick'), t('saving'));
     try { const r = await tapped(`/courier/orders/${encodeURIComponent(o.id)}/pickup`, { tag:'pickup:' + o.id }); if (r.landed) await load(); }
     catch (e) {
-      toast(String(e.message || e), 'alert-circle');
+      toast(refusedText(e), 'alert-circle');
       restore();
     }
   };
@@ -1127,7 +1135,7 @@ function renderRefused(o){
       if (r.landed) { toast(t('refusedDone'), 'circle-check'); await load(); }
       else renderActive(o);
     } catch (e) {
-      toast(String(e.message || e), 'alert-circle');
+      toast(refusedText(e), 'alert-circle');
       b.disabled = false; b.removeAttribute('aria-busy');
     }
   };
@@ -1154,14 +1162,14 @@ async function deliver(o, collected){
       await load();
     }
   } catch (e) {
-    toast(String(e.message || e), 'alert-circle'); seaEvent('dispatch_failed', 40);
+    toast(refusedText(e), 'alert-circle'); seaEvent('dispatch_failed', 40);
     if (btn) btn.disabled = false;
   }
 }
 
 async function setShift(open){
-  try { await api('/courier/shift', { method:'POST', attend:true, body: JSON.stringify({ open }) }); await load(); }
-  catch (e) { toast(String(e.message || e), 'alert-circle'); }
+  try { await api('/courier/shift', { method:'POST', attend:true, body: JSON.stringify({ open }) }); landedNotice(); await load(); }
+  catch (e) { toast(refusedText(e), 'alert-circle'); }
 }
 
 // ── guide ───────────────────────────────────────────────────────────────────

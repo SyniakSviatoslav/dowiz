@@ -56,6 +56,8 @@ const SHELL = [
   '/lib/vocab.js',
   '/lib/outbox.js',
   '/lib/body.js',
+  '/lib/outcome-logic.js',
+  '/lib/outcome-words.js',
   '/lib/voice.js',
   '/lib/langs.js',
   '/store/storage.js',

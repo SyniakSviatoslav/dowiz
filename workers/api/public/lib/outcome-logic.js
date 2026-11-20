@@ -1,8 +1,9 @@
 // HOW A WRITE ENDED, AS ONE NOTICE. PURE: no DOM, no network (the test is
-// `outcome-logic.test.mjs`); `core.js` api() calls it for every write a
-// person makes, so no screen can end a save in silence or say "saved" for
-// a refusal. Saved is green; not saved is red, with the reason by status in
-// the reader's language and the hub's own words beside it.
+// `outcome-logic.test.mjs`); the console's api() (`admin/core.js`) and the
+// courier's taps (`courier/app.js`) call it for every write a person makes,
+// so no screen can end a save in silence or say "saved" for a refusal. Saved
+// is green; not saved is red, with the reason by status in the reader's
+// language (`outcome-words.js`) and the hub's own words beside it.
 //
 // ASCII QUOTES ONLY in this file.
 
@@ -22,6 +23,14 @@ export function notice(o, t){
   if (/^HTTP \d+$/.test(said)) said = '';
   if (said.length > HUB_WORDS_MAX) said = said.slice(0, HUB_WORDS_MAX - 1) + '…';
   return { text: `${t('out_notSaved')}: ${why}${said ? ` (${said})` : ''}`, tone: 'danger', icon: 'alert-circle' };
+}
+
+/// A landed write's notice, said after the turn, and only when nothing was
+/// toasted in it: a screen's own word ("Delivered") is more specific and wins.
+/// `count` reads how many toasts were shown; `defer` runs a function later.
+export function unlessToasted(count, show, defer = f => setTimeout(f, 0)){
+  const before = count();
+  defer(() => { if (count() === before) show(); });
 }
 
 /// The calls a session makes for itself: never a person's action.
