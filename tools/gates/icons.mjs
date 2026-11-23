@@ -20,6 +20,7 @@ if (have.size < 20) { console.log(`icons: read ${have.size} icons from lib/icons
 
 const PATS = [/\bicon\(\s*'([a-z0-9-]+)'/g, /\bicon:\s*'([a-z0-9-]+)'/g, /\bic:\s*'([a-z0-9-]+)'/g, /_ICON\s*=\s*'([a-z0-9-]+)'/g];
 const TABLE = /_ICON\s*=\s*\{([^}]*)\}/g;
+const ROWS = /\bTILES\s*=\s*\[(\s*\[[\s\S]*?\])\s*\];/g;
 const missing = [];
 let seen = 0;
 // The surfaces that draw `ti ti-<name>` masks from lib/icons.css. The kit
@@ -35,6 +36,8 @@ const walk = d => {
     const names = [];
     for (const re of PATS) for (const m of src.matchAll(re)) names.push([m[1], m.index]);
     for (const t of src.matchAll(TABLE)) for (const m of t[1].matchAll(/:\s*'([a-z0-9-]+)'/g)) names.push([m[1], t.index]);
+    // Positional tile tables, `TILES = [['id', 'icon', 'word'], ...]` (stock.js): the second string of each row.
+    for (const t of src.matchAll(ROWS)) for (const m of t[1].matchAll(/\[\s*'[^']*'\s*,\s*'([a-z0-9-]+)'/g)) names.push([m[1], t.index]);
     for (const [n, at] of names) {
       seen++;
       if (!have.has(n)) missing.push(`${path.relative(PUB, p)}:${src.slice(0, at).split('\n').length} ${n}`);

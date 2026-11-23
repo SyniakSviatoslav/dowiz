@@ -43,7 +43,7 @@ export const basisOf = C.basisOf;
 /// The five things a kitchen does with its shelf, as tiles.
 const TILES = [['delivery', 'package', 'inv_delivery'], ['count', 'check', 'inv_count'], ['prep', 'tools-kitchen-2', 'inv_prep'],
   ['waste', 'trash', 'inv_waste'], ['numbers', 'chart-bar', 'inv_numbers', 'stock.numbers'], ['prepList', 'note', 'pl_tile', 'prepList.open'],
-  ['week', 'shopping-cart', 'wp_tile']];
+  ['week', 'shopping-bag', 'wp_tile']];
 
 let stock = null;
 /// The semi-finished products, hydrated (`GET /api/owner/preps`), by id.
