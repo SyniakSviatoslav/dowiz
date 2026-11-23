@@ -63,18 +63,36 @@ pub fn suggest(par: i64, available: i64, on_order: i64, pack: Option<i64>) -> i6
     }
 }
 
+/// What one record took off its item's shelf, by the one rule of "use":
+/// orders' draws, till sales net of voids, batches cooked, write-offs and
+/// prep moved into another supply. Everything else is 0.
+pub fn drawn(ev: &StockEvent) -> i64 {
+    match ev {
+        StockEvent::Consumed { qty, .. } | StockEvent::Served { qty, .. } | StockEvent::Cooked { qty, .. } | StockEvent::Wasted { qty, .. } => *qty,
+        StockEvent::Unserved { qty, .. } => -qty,
+        StockEvent::Produced { item, qty, into, .. } if moved_into(item, into).is_some() => *qty,
+        _ => 0,
+    }
+}
+
+/// Per supply, the supplier its newest delivery named.
+pub fn last_supplier(j: &Journal) -> BTreeMap<String, String> {
+    let mut out = BTreeMap::new();
+    for e in &j.entries {
+        if let (StockEvent::Received { item, .. }, Some(s)) = (&e.ev, e.meta.supplier.as_deref()) {
+            out.insert(item.clone(), s.to_string());
+        }
+    }
+    out
+}
+
 /// Per supply, what left the shelf since `since` and the first instant the
 /// supply appears at all (a newer supply is averaged over its own days).
 pub fn used_since(j: &Journal, since: i64) -> BTreeMap<String, (i64, i64)> {
     let mut out: BTreeMap<String, (i64, i64)> = BTreeMap::new();
     for e in &j.entries {
         let Some(at) = e.meta.at else { continue };
-        let q = match &e.ev {
-            StockEvent::Consumed { qty, .. } | StockEvent::Served { qty, .. } | StockEvent::Cooked { qty, .. } | StockEvent::Wasted { qty, .. } => *qty,
-            StockEvent::Unserved { qty, .. } => -qty,
-            StockEvent::Produced { item, qty, into, .. } if moved_into(item, into).is_some() => *qty,
-            _ => 0,
-        };
+        let q = drawn(&e.ev);
         let row = out.entry(e.ev.item().to_string()).or_insert((0, at));
         row.1 = row.1.min(at);
         if at >= since {

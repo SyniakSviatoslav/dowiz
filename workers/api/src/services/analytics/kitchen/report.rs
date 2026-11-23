@@ -19,6 +19,10 @@ use crate::services::operations::stock::order_list::{self, CYCLE_DEFAULT_DAYS, D
 #[path = "avt.rs"]
 pub mod avt;
 
+/// The coming week's purchase list from the average weekly use.
+#[path = "week.rs"]
+pub mod week;
+
 /// ‰ of `part` in `whole`; `None` when there is no whole.
 fn pm(part: i64, whole: i64) -> Option<i64> {
     (whole > 0).then(|| part * 1000 / whole)

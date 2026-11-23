@@ -28,6 +28,7 @@ import * as N from '/admin/nom-logic.js';
 import { stockSearch } from '/admin/supply-resolve.js';
 import { openKitchen, ensureCss } from '/admin/kitchen-analytics.js';
 import { openPrepList } from '/admin/prep-list.js';
+import { openWeek } from '/admin/stock-week.js';
 import { drawHealth } from '/admin/stock-health.js';
 import { selection, pickRow, barMarkup, bindBar, tapDelete, deleteSupplies, openQuickAdd, ensureNomCss } from '/admin/nom.js';
 import { show } from '/admin/app.js';
@@ -41,7 +42,8 @@ export const basisOf = C.basisOf;
 
 /// The five things a kitchen does with its shelf, as tiles.
 const TILES = [['delivery', 'package', 'inv_delivery'], ['count', 'check', 'inv_count'], ['prep', 'tools-kitchen-2', 'inv_prep'],
-  ['waste', 'trash', 'inv_waste'], ['numbers', 'chart-bar', 'inv_numbers', 'stock.numbers'], ['prepList', 'note', 'pl_tile', 'prepList.open']];
+  ['waste', 'trash', 'inv_waste'], ['numbers', 'chart-bar', 'inv_numbers', 'stock.numbers'], ['prepList', 'note', 'pl_tile', 'prepList.open'],
+  ['week', 'shopping-cart', 'wp_tile']];
 
 let stock = null;
 /// The semi-finished products, hydrated (`GET /api/owner/preps`), by id.
@@ -119,6 +121,7 @@ function openTile(id){
   if (id === 'waste') return openWaste(ctx);
   if (id === 'numbers') return openKitchen();
   if (id === 'prepList') return openPrepList();
+  if (id === 'week') return openWeek();
 }
 
 /// The four actions under an ingredient.
