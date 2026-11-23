@@ -147,11 +147,12 @@ impl HubImages {
         let names = crate::services::analytics::kitchen::till::TillNames { map: &map, i18n: &i18n };
         match crate::services::analytics::kitchen::answer_till(listed, &cat, &stock, &venue, now, (from.as_deref(), to.as_deref(), days.as_deref()), &cold, &names) {
             Ok(mut v) => {
-                // `menu` and `history` are v2 (analytics.kitchen.v2); v1 keeps its bytes.
+                // `menu`, `history` and `week` are v2 (analytics.kitchen.v2); v1 keeps its bytes.
                 if query(req, "v")?.as_deref() != Some("2") {
                     if let Some(m) = v.as_object_mut() {
                         m.remove("menu");
                         m.remove("history");
+                        m.remove("week");
                     }
                 }
                 Response::from_json(&v)
