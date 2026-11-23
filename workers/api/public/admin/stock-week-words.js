@@ -19,7 +19,7 @@ export const WORDS = {
     wp_tile: 'For the week', wp_title: 'Purchases for the week', wp_hint: 'The average weekly use of the last four whole weeks, plus the days until the goods arrive, less what is free on the shelf, rounded up to the pack.',
     wp_week: 'week', wp_weeks: 'weeks', wp_days: 'days', wp_since: 'since', wp_noData: 'No sale has drawn from the stock yet: there is no average.',
     wp_weekly: 'a week', wp_free: 'free', wp_notCounted: 'stock not counted', wp_belowZero: 'below zero: deliveries not recorded',
-    wp_toBuy: 'to buy', wp_need: 'the weekʼs need', wp_lead: 'days until delivery', wp_cost: 'est. cost', wp_noPrice: 'no price',
+    wp_toBuy: 'to buy', wp_need: 'the weekʼs need', wp_lead: 'd until delivery', wp_cost: 'est. cost', wp_noPrice: 'no price',
     wp_total: 'Estimated cost of the list', wp_unpriced: 'rows with no price, left out of the sum',
     wp_floor: 'of sales are dishes with no recipe: they draw nothing from the stock, so this list is a floor.',
     wp_top: 'Dishes with no recipe, by revenue', wp_copy: 'Copy for the supplier', wp_copied: 'Copied', wp_noSupplier: 'No supplier',

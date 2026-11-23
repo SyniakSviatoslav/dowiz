@@ -6,7 +6,7 @@
 // answers (`GET /api/owner/analytics/kitchen` `week`).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { qtyOf, groups, dataText, shareText, supplierText } from './stock-week-logic.js';
+import { qtyOf, groups, dataText, shareText, supplierText, screenQty } from './stock-week-logic.js';
 import { WORDS } from './stock-week-words.js';
 import { LANGS } from '../lib/langs.js';
 
@@ -55,6 +55,20 @@ test('the share of sales no recipe draws for, in whole per cent; nothing sold cl
   assert.equal(shareText({ noRecipe: { pm: 1000 } }), '100 %');
   assert.equal(shareText({ noRecipe: { pm: null } }), null);
   assert.equal(shareText(undefined), null);
+});
+
+test('the screen writes an amount exactly with a point, as every stock screen does; the supplier text keeps its own', () => {
+  assert.equal(screenQty(2798, 'g'), '2.798 kg');
+  assert.equal(screenQty(26480, 'g'), '26.48 kg');
+  assert.equal(screenQty(1000, 'ml'), '1 l');
+  assert.equal(screenQty(999, 'g'), '999 g');
+  assert.equal(screenQty(0, 'g'), '0 g');
+  assert.equal(screenQty(-32448, 'g'), '-32.448 kg');
+  assert.equal(screenQty(12, 'unit'), '12');
+});
+
+test('the lead time reads after any number in English: never "1 days"', () => {
+  assert.ok(!/^days\b/.test(WORDS.en.wp_lead), WORDS.en.wp_lead);
 });
 
 test('every language has every word, and no word is empty', () => {

@@ -7,6 +7,15 @@
 // ASCII QUOTES ONLY in this file.
 
 import { orderText } from './order-list-logic.js';
+import { showMilli } from './ingredients-calc.js';
+
+/// A quantity as the owner's screen writes it: exact, with a point, as every
+/// stock screen does (`showMilli`): 2798 g is "2.798 kg", 999 g "999 g".
+/// The supplier's message keeps `qtyText` (a comma, the supplier's way).
+export function screenQty(q, unit){
+  if ((unit === 'g' || unit === 'ml') && Math.abs(q) >= 1000) return `${showMilli(q)} ${unit === 'g' ? 'kg' : 'l'}`;
+  return unit === 'g' || unit === 'ml' ? `${q} ${unit}` : String(q);
+}
 
 /// Up to whole packs of `pack` (none: as it is).
 const packUp = (q, pack) => (pack > 0 ? Math.ceil(q / pack) * pack : q);

@@ -11,6 +11,13 @@ const TODAY = [
   { id: 'loss', price: 300, portionCost: 450, marginPortion: -150, foodCostPm: 1500, hasRecipe: true, missing: [] },
 ];
 
+test('the dish sheet`s "today" label reads before a price AND before the "cost unknown" badge, in every language', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('./menu-margin-i18n.js', import.meta.url), 'utf8');
+  const labels = [...src.matchAll(/mg_today: '([^']*)'/g)].map(m => m[1]);
+  assert.equal(labels.length, 4);
+  for (const l of labels) assert.ok(!/(costs|коштує|kushton|стоит)$/.test(l), `"${l}" + "cost unknown" reads twice`);
+});
+
 test('per mille as a percent, the dish editor`s own formatter (ingredients-calc.js)', () => {
   assert.equal(pct(220), '22%');
   assert.equal(pct(337), '33.7%');

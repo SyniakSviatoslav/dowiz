@@ -15,28 +15,29 @@
 import '/admin/stock-week-i18n.js';
 import { $, esc, t, api, sheet, busy, toast, money, S } from '/admin/core.js';
 import { btn, pill, rowDiv, empty, loading } from '/admin/parts.js';
-import { shareOrCopy, qtyText } from '/admin/order-list-logic.js';
+import { shareOrCopy } from '/admin/order-list-logic.js';
 import * as W from '/admin/stock-week-logic.js';
 
 /// One ingredient: weekly average, free stock (or why it is not counted), to buy, est. cost.
 function rowOf(r){
   const u = r.unit || '';
-  const free = r.stockKnown ? `${t('wp_free')} ${qtyText(r.available, u)}`
+  const free = r.stockKnown ? `${t('wp_free')} <b class="mono">${esc(W.screenQty(r.available, u))}</b>`
     : pill('warn', { key: r.counted ? 'wp_belowZero' : 'wp_notCounted' });
-  const facts = [`${qtyText(r.weekly ?? 0, u)} ${t('wp_weekly')}`, `${r.leadDays} ${t('wp_lead')}`, r.supplier ? esc(r.supplier) : ''].filter(Boolean).join(' · ');
+  const facts = [`${W.screenQty(r.weekly ?? 0, u)} ${t('wp_weekly')}`, `${r.leadDays} ${t('wp_lead')}`, r.supplier ? esc(r.supplier) : ''].filter(Boolean).join(' · ');
   const qty = W.qtyOf(r);
-  const buy = r.stockKnown ? `${t('wp_toBuy')} <b class="mono">${esc(qtyText(qty, u))}</b>` : `${t('wp_need')} <b class="mono">${esc(qtyText(qty, u))}</b>`;
+  const buy = `${t(r.stockKnown ? 'wp_toBuy' : 'wp_need')} <b class="mono">${esc(W.screenQty(qty, u))}</b>`;
   const cost = r.cost != null ? money(r.cost) : (qty > 0 ? pill('info', { key: 'wp_noPrice' }) : '');
-  return rowDiv({ title: r.name, sub: `<span class="mono">${facts}</span> ${free}<br>${buy}${cost ? ` · ${cost}` : ''}`, data: { wp: r.id } });
+  // Each line in its own <small>: a <b class="mono"> straight under .ui-row-sub is a block (admin.css), and broke a line in three.
+  return rowDiv({ title: r.name, sub: `<span class="mono">${facts}</span><small>${free}</small><small>${buy}${cost ? ` · ${cost}` : ''}</small>`, data: { wp: r.id } });
 }
 
 /// The share of sales no recipe draws for, and the top dishes.
 function coverageOf(cov){
   const share = W.shareText(cov);
   if (!share) return '';
-  const top = (cov.top || []).map(d => `<li>${esc(d.name)} · ${d.sold}${d.revenue != null ? ` · ${money(d.revenue)}` : ''}</li>`).join('');
+  const top = (cov.top || []).map(d => `${esc(d.name)} · ${d.sold}${d.revenue != null ? ` · ${money(d.revenue)}` : ''}`).join('<br>');
   return `<section class="group"><p class="warn small"><b>${esc(share)}</b> ${t('wp_floor')}</p>
-    ${top ? `<p class="eyebrow">${t('wp_top')}</p><ul class="small">${top}</ul>` : ''}</section>`;
+    ${top ? `<p class="eyebrow">${t('wp_top')}</p><p class="small">${top}</p>` : ''}</section>`;
 }
 
 export async function openWeek(){
