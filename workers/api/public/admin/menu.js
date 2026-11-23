@@ -31,6 +31,7 @@ import * as RL from '/admin/menu-recipe-logic.js';
 import * as SR from '/admin/supply-resolve.js';
 import { inlineNew } from '/admin/supply-resolve-field.js';
 import { syncDish, redrawWhenClosed } from '/admin/sync.js';
+import { markMargins, fillHistory } from '/admin/menu-margin.js'; // the owner's margin per dish and its 30 days
 /// W-NOM: the dishes ticked for a bulk delete (the owner's).
 const sel = selection();
 /// A filter chip whose data-* the screen's click handler reads.
@@ -103,6 +104,7 @@ export async function render(host){
         ${rowBtn({ cls: 'cat-h', title: c.name, data: { cat: c.id }, attrs: { 'aria-expanded': String(open) }, tour: 'menu.category', trailing: `<span class="n">${(c.products || []).length}</span>${icon('chevron-down', 'chev')}` })}
         <div class="rows" ${open ? '' : 'hidden'}>${rows}</div>
       </section>`; }).join('')}
+    <div id="mTill"></div>
     ${!cats.length ? empty('bowl-chopsticks', { key: 'loadFail', alert: true }) : ''}
     ${sel.on ? barMarkup(sel) : ''}`;
   ensureNomCss();
@@ -121,7 +123,7 @@ export async function render(host){
     const r = e.target.closest('[data-p]'); if (r) openDish(r.dataset.p);
   };
   const mq = $('#mq', host); mq.oninput = () => { view.q = mq.value; rerender().then(() => $('#mq')?.focus()); };
-  ensureCss(); markNoStock(host);
+  ensureCss(); markNoStock(host); markMargins(host, me().staff);
   $('#mImport', host).onclick = openImport;
   const mh = $('#mHist', host); if (mh) mh.onclick = () => import('/admin/menu-history.js').then(m => m.openHistory()); // W-PITR: the menu's edit history
   // TZ 6: the bulk importer is loaded when it is asked for, not with the tab.
@@ -214,6 +216,7 @@ export async function openDish(id){
       <div>${field({ id: 'd-price', key: 'price', inputmode: 'numeric', value: p.price ?? '', tour: 'dish.price' })}</div>
       <div>${field({ id: 'd-cook', key: 'cookingMin', inputmode: 'numeric', value: p.cookingMin ?? '' })}</div>
     </div>
+    <div id="dMargin"></div>
     ${select({ id: 'd-station', key: 'station', value: p.station || 'kitchen', options: STATIONS.map(s => ({ value: s, key: 'station_' + s })), tour: 'dish.station' })}<p class="hint" data-t="stationHint"></p>
     <p class="ui-label" data-t="tags"></p>
     <div class="chips" id="tagPick" role="group">${TAGS.map(tg => ui.chip({ as: 'button', selected: tags.has(tg), label: tagLabel(tg), attrs: { data: { tag: tg, tour: 'dish.tag' } } })).join('')}</div>
@@ -255,6 +258,10 @@ export async function openDish(id){
   const edited = new Set();
   for (const f of FIELDS) $(BOX[f]).addEventListener('input', () => edited.add(f));
   bindRecipe(p); bindSenseEditor(p); bindAllergens(); bindFolds($('#sheetIn'));
+  // The 30 days and what an unknown cost waits on (owner only): a supply opens its own sheet, "no recipe" the recipe here.
+  if (!me().staff) fillHistory($('#dMargin'), id, {
+    supply: sid => import('/admin/ingredients.js').then(m => m.openSupply((supplyBook || []).find(s => s.id === sid) || null, { data: { supplies: supplyBook || [] }, reload: () => openDish(id) })),
+    recipe: () => { const q = $('#rcQ'); q?.scrollIntoView?.({ block: 'center' }); q?.focus?.(); } });
   for (const b of $$('[data-tag]', $('#sheetIn'))) b.onclick = () => b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
   $('#photoPick').onclick = () => $('#photoFile').click();
   $('#photoFile').onchange = async e => {

@@ -33,12 +33,12 @@ const FAKES = {
     export const confirm = async () => ({ ok: true, reason: '' });
     export const sheet = html => { document.querySelector('#sheetIn').innerHTML = html; };
     export const closeSheet = () => { F().closed++; };
-    export const money = n => String(n), moneyEl = n => '<span>' + n + '</span>';
+    export const money = n => String(n), moneyEl = n => '<span>' + n + '</span>', ago = () => 'ago';
     export const hydrate = () => {}, retranslate = () => {}, repaintMoney = () => {};
     let onClose = null; export const whenSheetCloses = fn => { onClose = fn; }; export const closeSheetFor = () => { const f = onClose; onClose = null; f?.(); };
     export const switchEl = (id, on, key, hintKey) => check({ id, checked: on, key, hintKey });`,
   '/admin/i18n.js': `export const T = { sq: {}, en: {}, uk: {}, ru: {} }; export const lang = 'en'; export const LANGS = ['sq', 'en', 'uk', 'ru']; export const st = k => k;`,
-  '/admin/app.js': `const F = () => globalThis.__md; export const loadVenue = async () => { F().loads++; }, rerender = async () => { F().rerenders++; }, me = () => ({}), show = async () => {};`,
+  '/admin/app.js': `const F = () => globalThis.__md; export const loadVenue = async () => { F().loads++; }, rerender = async () => { F().rerenders++; }, me = () => F().me || {}, show = async () => {};`,
 };
 register('data:text/javascript,' + encodeURIComponent(`const F = ${JSON.stringify(FAKES)}, P = ${JSON.stringify(PUBLIC)};
   export async function resolve(spec, ctx, next){
@@ -436,4 +436,58 @@ test('sweep c: translations and nutrition sit under remembered folds; price, nam
   assert.ok(box.querySelector('details#dTrFold #d-name-uk'), 'the other languages are inside the translations fold');
   assert.ok(box.querySelector('details#dNutFold #d-kcal'), 'kcal is inside the nutrition fold');
   for (const id of ['d-name', 'd-price', 'd-avail', 'd-cat']) assert.equal(box.querySelector('#' + id).closest('details'), null, `${id} is a primary field, never folded`);
+});
+
+// ── THE MARGIN (operator 2026-11-23): each row's food cost and margin, the dish's 30 days ──────────
+const KITCHEN = { menu: {
+  today: [{ id: 'd1', price: 1000, portionCost: 220, marginPortion: 780, foodCostPm: 220, hasRecipe: true, missing: [] },
+    { id: 'd2', price: 1000, portionCost: null, marginPortion: null, foodCostPm: null, hasRecipe: true, missing: [{ id: 'rice', name: 'Rice' }] }],
+  dishes: [{ id: 'd1', sold: 6, revenue: 5000, cogs: 1350, margin: 3650, foodCostPm: 270, costUnknown: false, costBasis: 'mixed', stamped: 2, stampedCogs: 600, todayPortions: 4, todayCogs: 750, attributed: 3 }],
+  unmatched: [{ code: '77', name: 'Tempura', portions: 4, revenue: 2800, why: 'no_dish' }] } };
+const listOf = async (routes, me = {}) => {
+  freshBook();
+  const { box, f } = page({ ...BASE, 'GET /owner/products': { products: [] }, ...routes });
+  f.me = me; f.S.categories = [{ id: 'c1', name: 'Rolls', products: f.S.products }];
+  const host = box.ownerDocument.createElement('div'); box.ownerDocument.body.appendChild(host);
+  await M.render(host); await tick(10);
+  return { box, f, host };
+};
+const kitchenReads = f => f.calls.filter(c => c[1].startsWith('/owner/analytics/kitchen'));
+
+test('margin: an owner sees each row`s food cost and margin per portion, or "cost unknown"; one read for the list', async () => {
+  const { f, host } = await listOf({ 'GET /owner/analytics/kitchen': KITCHEN });
+  assert.deepEqual(kitchenReads(f).map(c => c[1]), ['/owner/analytics/kitchen?days=30&v=2']);
+  const d1 = host.querySelector('[data-p="d1"] .mg').outerHTML, d2 = host.querySelector('[data-p="d2"] .mg').outerHTML;
+  assert.ok(d1.includes('22%') && d1.includes('780'), d1);
+  assert.ok(d2.includes('mg_unknown') && !d2.includes('%'), 'an unknown cost is said, never 0 %: ' + d2);
+});
+
+test('margin twin: staff never ask for the margins and see none; a failed read leaves the list as it was', async () => {
+  const s = await listOf({ 'GET /owner/analytics/kitchen': KITCHEN }, { staff: true });
+  assert.equal(kitchenReads(s.f).length, 0);
+  assert.equal(s.host.querySelector('.mg'), null);
+  const e = await listOf({ 'GET /owner/analytics/kitchen': new Error('503') });
+  assert.equal(e.host.querySelector('.mg'), null);
+  assert.ok(e.host.querySelector('[data-p="d1"]'), 'the rows are still there');
+});
+
+test('margin: the till codes no dish answers to are listed by revenue, and each opens the existing mapping sheet', async () => {
+  const { f, host } = await listOf({ 'GET /owner/analytics/kitchen': KITCHEN, 'GET /owner/ebills': { state: {}, config: {}, products: [] } });
+  const row = host.querySelector('[data-till="77"]');
+  assert.ok(row && row.outerHTML.includes('Tempura'), 'the unmatched code is named');
+  await row.querySelector('button').onclick(); await tick(10);
+  assert.ok(f.calls.some(c => c[1].startsWith('/owner/ebills?')), 'the mapping sheet (ebills.js) opened');
+});
+
+test('dish sheet: the 30 days with the basis of each part of the cost; an unknown cost names what to fix', async () => {
+  freshBook();
+  const { box, f } = page({ ...BASE, 'GET /owner/analytics/kitchen': KITCHEN });
+  await M.openDish('d1'); await tick(10);
+  const h = box.querySelector('#dMargin').innerHTML;
+  for (const w of ['mg_stamped', 'mg_recipeToday', 'mg_attributed', '1350', '27%']) assert.ok(h.includes(w), `${w} in ${h}`);
+  await M.openDish('d2'); await tick(10);
+  const fix = box.querySelector('#dMargin [data-fix-supply="rice"]');
+  assert.ok(fix, 'the unpriced supply is a button');
+  assert.ok(box.querySelector('#dMargin').innerHTML.includes('mg_notSold'), 'not sold in the window is said');
+  assert.equal(kitchenReads(f).length, 1, 'the answer is read once for both sheets');
 });

@@ -12,6 +12,7 @@ fn dish(id: &str, sold: i64, price: i64, cost: Option<i64>) -> MenuIn {
         stamped_cogs: cost.map_or(0, |c| c * sold),
         today: None,
         costliest: cost.map(|c| ("salmon".into(), "Salmon".into(), c / 2)),
+        ..MenuIn::default()
     }
 }
 
@@ -72,4 +73,53 @@ fn an_empty_or_uncosted_window_has_no_average() {
     assert_eq!(v["count"], 1, "a dish not sold is not on the matrix");
     assert!(v["averageMarginPortion"].is_null());
     assert!(find(&v, "e")["quadrant"].is_null());
+}
+
+/// THE MENU TODAY: every dish, sold or not, its portion cost from today's
+/// recipe against today's price; a dish whose cost is unknown NAMES what is
+/// missing -- the unpriced supply, or no recipe. Twin: a priced one has none.
+#[test]
+fn every_dish_today_has_its_margin_or_names_what_is_missing() {
+    use super::super::sales::DishLine;
+    let line = |s: &str, qty: i64| DishLine { supply: s.into(), qty: qty.into(), gross_g: Some(qty), net_g: Some(qty), out_g: Some(qty) };
+    let sup = |id: &str, cost: Option<i64>| (id.to_string(), Supply { id: id.into(), name: id.to_uppercase(), unit: "g".into(), basis: 100, list_cost: cost, clean_pm: 1000, cook_pm: 1000 });
+    let supplies = HashMap::from([sup("salmon", Some(200)), sup("rice", Some(20)), sup("eel", None)]);
+    let d = |id: &str, lines: Vec<DishLine>| (id.to_string(), Dish { id: id.into(), name: id.into(), lines, leaves: vec![] });
+    let dishes = HashMap::from([d("sake", vec![line("salmon", 100), line("rice", 100)]), d("unagi", vec![line("eel", 50), line("rice", 100), line("ghost", 1)]), d("cola", vec![])]);
+    let book = CostBook::default();
+    let price = |id: &str| Some(match id { "sake" => 1000, "unagi" => 1200, _ => 200 });
+    let v = today(&dishes, &supplies, &book, &price);
+    let row = |id: &str| v.iter().find(|r| r["id"] == id).unwrap().clone();
+    let sake = row("sake");
+    assert_eq!((sake["portionCost"].as_i64(), sake["marginPortion"].as_i64(), sake["foodCostPm"].as_i64()), (Some(220), Some(780), Some(220)));
+    assert_eq!(sake["missing"], json!([]));
+    let unagi = row("unagi");
+    assert!(unagi["portionCost"].is_null() && unagi["marginPortion"].is_null() && unagi["foodCostPm"].is_null(), "no cost is invented: {unagi}");
+    assert_eq!(unagi["missing"], json!([{ "id": "eel", "name": "EEL" }, { "id": "ghost", "name": "ghost" }]), "the unpriced supply and the one the catalogue lost");
+    assert_eq!((row("cola")["hasRecipe"].as_bool(), row("cola")["missing"].clone()), (Some(false), json!([])));
+    assert_eq!(v.iter().map(|r| r["id"].as_str().unwrap()).collect::<Vec<_>>(), ["cola", "sake", "unagi"]);
+}
+
+/// The dish sheet's history: which part of the cost is stamped and which
+/// is today's recipe, and how many portions the till's lines added.
+/// Twin: an unknown cost names what it waits on and invents no cost.
+#[test]
+fn a_sold_row_says_which_basis_each_cost_has() {
+    let mut d = dish("x", 4, 1000, Some(300));
+    d.stamped = 1;
+    d.stamped_cogs = 300;
+    d.today = Some(350);
+    d.attributed = 2;
+    d.has_recipe = true;
+    let v = matrix(&[d]);
+    let x = find(&v, "x");
+    assert_eq!((x["stamped"].as_i64(), x["stampedCogs"].as_i64(), x["todayPortions"].as_i64(), x["todayCogs"].as_i64()), (Some(1), Some(300), Some(3), Some(1050)));
+    assert_eq!((x["attributed"].as_i64(), x["costBasis"].as_str(), x["foodCostPm"].as_i64()), (Some(2), Some("mixed"), Some(337)));
+    let mut u = dish("u", 2, 500, None);
+    u.missing = vec![("eel".into(), "Eel".into())];
+    u.has_recipe = true;
+    let v = matrix(&[u]);
+    let u = find(&v, "u");
+    assert_eq!((u["missing"].clone(), u["todayPortions"].as_i64(), u["hasRecipe"].as_bool()), (json!([{ "id": "eel", "name": "Eel" }]), Some(2), Some(true)));
+    assert!(u["todayCogs"].is_null() && u.get("cogs").is_none(), "no cost is invented: {u}");
 }

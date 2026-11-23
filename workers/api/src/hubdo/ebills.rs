@@ -60,7 +60,7 @@ impl HubImages {
 
     /// The `ebills` table and the generation it was read at; a fresh one if
     /// the venue has never configured the link.
-    async fn ebills_table(&self) -> Result<(i64, Option<Table>)> {
+    pub(super) async fn ebills_table(&self) -> Result<(i64, Option<Table>)> {
         match self.image(IMAGE).await? {
             Some((meta, bytes)) => Ok((meta.generation, Some(Table::load(&bytes, CEILING).map_err(|_| bad("ebills image is unreadable"))?))),
             None => Ok((0, None)),

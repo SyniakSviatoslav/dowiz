@@ -136,7 +136,16 @@ impl HubImages {
         let (_, bytes) = self.cube_image().await?;
         let parsed = cube::parsed(&bytes);
         let cold = cube::rows_of(&parsed);
-        match crate::services::analytics::kitchen::answer_with(listed, &cat, &stock, &venue, now, (from.as_deref(), to.as_deref(), days.as_deref()), &cold) {
+        // A till code the owner has since mapped, or whose name is one dish's, counts under that dish here.
+        let i18n = self.i18n_rows().await;
+        let (_, eb) = self.ebills_table().await?;
+        let map = |code: &str| {
+            eb.as_ref()
+                .and_then(|t| crate::ebills::state::get::<crate::ebills::state::Mapping>(t, crate::ebills::state::K_MAP, code).ok().flatten())
+                .map(|m| m.product_id)
+        };
+        let names = crate::services::analytics::kitchen::till::TillNames { map: &map, i18n: &i18n };
+        match crate::services::analytics::kitchen::answer_till(listed, &cat, &stock, &venue, now, (from.as_deref(), to.as_deref(), days.as_deref()), &cold, &names) {
             Ok(mut v) => {
                 // `menu` and `history` are v2 (analytics.kitchen.v2); v1 keeps its bytes.
                 if query(req, "v")?.as_deref() != Some("2") {

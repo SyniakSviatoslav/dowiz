@@ -29,6 +29,8 @@ pub mod lost;
 pub mod report;
 pub mod sales;
 pub mod shelf;
+/// Till lines attributed to a dish at read time, for the history alone.
+pub mod till;
 /// What guests' notes are about, per dish per week (P16b).
 pub mod topics;
 
@@ -172,8 +174,27 @@ pub type ColdRows<'a> = &'a dyn Fn(i64, i64) -> std::result::Result<std::collect
 /// P2a): the sales side of days 31-62 is the cube's, not a zero. A cube that
 /// cannot be read is said (`history.error`), never a silent zero. PURE: the
 /// venue's object calls this (`/fold/kitchen`) with the images it holds. A
-/// window that is not one is the 400's text.
+/// window that is not one is the 400's text. With no till mapping and no
+/// translation table: see [`answer_till`].
 pub fn answer_with(
+    listed: Vec<crate::hubdo::OrderView>,
+    cat: &dowiz_hub::catalog::Catalog,
+    stock: &dowiz_hub::stock::StockLog,
+    loc: &str,
+    now: i64,
+    win: (Option<&str>, Option<&str>, Option<&str>),
+    cold: ColdRows,
+) -> std::result::Result<Value, (u16, String)> {
+    answer_till(listed, cat, stock, loc, now, win, cold, &till::TillNames { map: &|_| None, i18n: &[] })
+}
+
+/// [`answer_with`], with what the venue knows of its till (`names`): a
+/// till line the owner has since mapped, or whose name is one dish's, is
+/// counted under that dish for these numbers alone (`till.rs`); the rest
+/// is named in `menu.unmatched`. `menu.today` is every dish at today's
+/// recipe against today's price.
+#[allow(clippy::too_many_arguments)]
+pub fn answer_till(
     listed: Vec<crate::hubdo::OrderView>,
     cat: &dowiz_hub::catalog::Catalog,
     stock: &dowiz_hub::stock::StockLog,
@@ -181,6 +202,7 @@ pub fn answer_with(
     now: i64,
     (from, to, days): (Option<&str>, Option<&str>, Option<&str>),
     cold: ColdRows,
+    names: &till::TillNames,
 ) -> std::result::Result<Value, (u16, String)> {
     let zone = crate::hubstore::zone_of(cat.location().and_then(|j| serde_json::from_str::<Value>(&j).ok()).as_ref());
     let w = window(zone, now, from, to, days).map_err(|why| (400, why))?;
@@ -192,7 +214,8 @@ pub fn answer_with(
         Ok(r) => (r, None),
         Err(why) => (std::collections::BTreeMap::new(), Some(why)),
     };
-    let sold = sales::fold_with(&orders, &rows, &dishes, &w);
+    let mut sold = sales::fold_with(&orders, &rows, &dishes, &w);
+    let tills = till::attribute(&mut sold, &dishes, &orders, &cat.products(), names);
     let moved = shelf::fold_journal(&journal, &supplies, &sold.placed_at, &w);
     let mut out = report::report(&sold, &moved, &dishes, &supplies, &journal, &w);
     // What the shelf holds now, at the one price rule; a ПФ with no average of its own at its card's.
@@ -206,11 +229,15 @@ pub fn answer_with(
     if let (Some(t), serde_json::Value::Object(sv)) = (out.get_mut("totals").and_then(serde_json::Value::as_object_mut), report::stock_value(&supplies, &journal, &card)) {
         t.extend(sv);
     }
-    out["menu"] = menu::matrix(&menu::inputs(&sold, &dishes, &supplies, &journal.book));
+    out["menu"] = menu::matrix(&menu::inputs(&sold, &dishes, &supplies, &journal.book, &tills.attributed));
+    let price = |id: &str| cat.product(id).and_then(|j| serde_json::from_str::<Value>(&j).ok()).and_then(|p| p.get("price").and_then(Value::as_i64));
+    out["menu"]["today"] = Value::Array(menu::today(&dishes, &supplies, &journal.book, &price));
+    out["menu"]["unmatched"] = Value::Array(tills.unmatched);
     out["topics"] = topics::fold(&orders, &dishes, &w);
     out["history"] = serde_json::json!({ "archivedDays": rows.len(), "error": unread });
     out["currency"] = serde_json::json!(crate::services::venue::currency_of(cat));
     out["lost"] = lost::report(&stock.lost_rows(), &dishes, &w);
+    out["week"] = report::week::answer(&orders, cat, stock, now, cold);
     Ok(out)
 }
 

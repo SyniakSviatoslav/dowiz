@@ -17,10 +17,12 @@
 //!
 //! Integer arithmetic only: every comparison is cross-multiplied in i128.
 
-use super::sales::{cost_line, portion_cost, Dish, Sales, Supply};
+use super::super::history::pm;
+use super::sales::{cost_line, per_micro, portion_cost, Dish, Sales, Supply};
+use crate::recipe::Qty;
 use dowiz_hub::stock::cost::CostBook;
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 /// One sold dish, as the matrix reads it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -36,10 +38,61 @@ pub struct MenuIn {
     pub today: Option<i64>,
     /// The recipe line that costs most per portion: (supply id, name, cost).
     pub costliest: Option<(String, String, i64)>,
+    /// Of `sold`, till portions counted under this dish at read time (`till.rs`).
+    pub attributed: i64,
+    pub has_recipe: bool,
+    /// What an unknown cost waits on: (supply id, name), see [`missing_of`].
+    pub missing: Vec<(String, String)>,
 }
 
-/// The matrix's input from the kitchen's folds.
-pub fn inputs(sold: &Sales, dishes: &HashMap<String, Dish>, supplies: &HashMap<String, Supply>, book: &CostBook) -> Vec<MenuIn> {
+/// What a dish's cost waits on: each supply of its recipe (or of the raw
+/// items its ПФ expands to) that has no price, or that the catalogue lost --
+/// (id, name), sorted. Empty when every line has a cost or there is no recipe.
+pub fn missing_of(dish: &Dish, supplies: &HashMap<String, Supply>, book: &CostBook) -> Vec<(String, String)> {
+    let priced = |id: &str, qty: Option<Qty>| {
+        supplies.get(id).is_some_and(|s| match qty {
+            Some(q) => cost_line(s, book, q).is_some(),
+            None => per_micro(s, book).is_some(),
+        })
+    };
+    let named = |id: &str| (id.to_string(), supplies.get(id).map_or(id.to_string(), |s| s.name.clone()));
+    let mut out: Vec<(String, String)> = if dish.leaves.is_empty() {
+        dish.lines.iter().filter(|l| !priced(&l.supply, Some(l.qty))).map(|l| named(&l.supply)).collect()
+    } else {
+        dish.leaves.iter().filter(|(id, _)| !priced(id, None)).map(|(id, _)| named(id)).collect()
+    };
+    out.sort();
+    out.dedup();
+    out
+}
+
+fn missing_json(m: &[(String, String)]) -> Value {
+    m.iter().map(|(id, name)| json!({ "id": id, "name": name })).collect()
+}
+
+/// THE MENU TODAY: every dish of the catalogue, sold or not, one portion at
+/// today's recipe against today's price (`price`), sorted by id. A cost that
+/// is not known stays null and the row names what it waits on (`missing`);
+/// never a zero.
+pub fn today(dishes: &HashMap<String, Dish>, supplies: &HashMap<String, Supply>, book: &CostBook, price: &dyn Fn(&str) -> Option<i64>) -> Vec<Value> {
+    let mut ids: Vec<&String> = dishes.keys().collect();
+    ids.sort();
+    ids.into_iter()
+        .map(|id| {
+            let d = &dishes[id];
+            let cost = portion_cost(d, supplies, book);
+            let p = price(id);
+            let fc = cost.zip(p.filter(|p| *p > 0)).and_then(|(c, p)| pm(c, p));
+            let missing = if cost.is_some() { Vec::new() } else { missing_of(d, supplies, book) };
+            json!({ "id": id, "price": p, "portionCost": cost, "marginPortion": cost.zip(p).map(|(c, p)| p - c), "foodCostPm": fc,
+                    "hasRecipe": !d.lines.is_empty(), "missing": missing_json(&missing) })
+        })
+        .collect()
+}
+
+/// The matrix's input from the kitchen's folds; `attributed` is what
+/// `till::attribute` moved onto each dish.
+pub fn inputs(sold: &Sales, dishes: &HashMap<String, Dish>, supplies: &HashMap<String, Supply>, book: &CostBook, attributed: &BTreeMap<String, i64>) -> Vec<MenuIn> {
     sold.dishes
         .iter()
         .map(|(id, row)| {
@@ -59,6 +112,9 @@ pub fn inputs(sold: &Sales, dishes: &HashMap<String, Dish>, supplies: &HashMap<S
                 stamped_cogs: row.stamped_cogs,
                 today: dish.and_then(|d| portion_cost(d, supplies, book)),
                 costliest,
+                attributed: attributed.get(id).copied().unwrap_or(0),
+                has_recipe: dish.is_some_and(|d| !d.lines.is_empty()),
+                missing: dish.map(|d| missing_of(d, supplies, book)).unwrap_or_default(),
             }
         })
         .collect()
@@ -85,6 +141,12 @@ pub fn quadrant(popular: bool, profitable: bool) -> &'static str {
     }
 }
 
+fn extend(row: &mut Value, parts: &Value) {
+    if let (Some(r), Some(p)) = (row.as_object_mut(), parts.as_object()) {
+        r.extend(p.clone());
+    }
+}
+
 /// The matrix over the dishes sold in the window.
 pub fn matrix(rows: &[MenuIn]) -> Value {
     let sold: Vec<&MenuIn> = rows.iter().filter(|d| d.sold > 0).collect();
@@ -104,9 +166,15 @@ pub fn matrix(rows: &[MenuIn]) -> Value {
         .map(|d| {
             let popular = 10 * i128::from(d.sold) * n >= 7 * total;
             let mix_pm = (total > 0).then(|| (i128::from(d.sold) * 1000 / total) as i64);
+            // The basis of each part of the cost, and what an unknown one waits on.
+            let rest = d.sold - d.stamped;
+            let parts = json!({ "stamped": d.stamped, "stampedCogs": d.stamped_cogs, "todayPortions": rest, "todayCogs": d.today.map(|c| c * rest),
+                                "attributed": d.attributed, "hasRecipe": d.has_recipe, "missing": missing_json(&d.missing) });
             let Some((c, basis)) = cogs(d) else {
-                return json!({ "id": d.id, "name": d.name, "sold": d.sold, "revenue": d.revenue, "mixPm": mix_pm,
+                let mut row = json!({ "id": d.id, "name": d.name, "sold": d.sold, "revenue": d.revenue, "mixPm": mix_pm,
                                "popular": popular, "costUnknown": true, "quadrant": null, "action": "cost_unknown" });
+                extend(&mut row, &parts);
+                return row;
             };
             let margin = d.revenue - c;
             let profitable = cm_sold > 0 && i128::from(margin) * cm_sold >= cm_total * i128::from(d.sold);
@@ -115,12 +183,14 @@ pub fn matrix(rows: &[MenuIn]) -> Value {
             // The gap to the average margin per portion, in whole minor
             // units: what a price rise or a cheaper line has to find.
             let raise = (q == "plowhorse" || q == "dog").then(|| avg.map(|a| (a - per).max(0))).flatten();
-            json!({
+            let mut row = json!({
                 "id": d.id, "name": d.name, "sold": d.sold, "revenue": d.revenue, "cogs": c, "costBasis": basis,
                 "margin": margin, "marginPortion": per, "mixPm": mix_pm, "popular": popular, "profitable": profitable,
-                "costUnknown": false, "quadrant": q, "action": q, "raiseBy": raise,
+                "costUnknown": false, "quadrant": q, "action": q, "raiseBy": raise, "foodCostPm": pm(c, d.revenue).filter(|_| d.revenue > 0),
                 "costliest": d.costliest.as_ref().map(|(id, name, cost)| json!({ "id": id, "name": name, "cost": cost })),
-            })
+            });
+            extend(&mut row, &parts);
+            row
         })
         .collect();
     let place_of = |v: &Value| match v["quadrant"].as_str() {
