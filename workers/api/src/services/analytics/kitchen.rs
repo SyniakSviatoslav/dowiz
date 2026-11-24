@@ -169,13 +169,9 @@ pub async fn kitchen(req: Request, ctx: RouteContext<crate::Req>) -> Result<Resp
 /// them (`hubdo/cube.rs`); `Err` is the reason the history is unreadable.
 pub type ColdRows<'a> = &'a dyn Fn(i64, i64) -> std::result::Result<std::collections::BTreeMap<i64, super::cube::DayCube>, String>;
 
-/// The kitchen's numbers over the venue's orders, catalogue and stock log --
-/// and the cube's rows for the days the hot log no longer holds (W-HIST
-/// P2a): the sales side of days 31-62 is the cube's, not a zero. A cube that
-/// cannot be read is said (`history.error`), never a silent zero. PURE: the
-/// venue's object calls this (`/fold/kitchen`) with the images it holds. A
-/// window that is not one is the 400's text. With no till mapping and no
-/// translation table: see [`answer_till`].
+/// The tests' shorthand: [`answer_till`] with no till mapping and no
+/// translation table.
+#[cfg(test)]
 pub fn answer_with(
     listed: Vec<crate::hubdo::OrderView>,
     cat: &dowiz_hub::catalog::Catalog,
@@ -188,7 +184,14 @@ pub fn answer_with(
     answer_till(listed, cat, stock, loc, now, win, cold, &till::TillNames { map: &|_| None, i18n: &[] })
 }
 
-/// [`answer_with`], with what the venue knows of its till (`names`): a
+/// The kitchen's numbers over the venue's orders, catalogue and stock log --
+/// and the cube's rows for the days the hot log no longer holds (W-HIST
+/// P2a): the sales side of days 31-62 is the cube's, not a zero. A cube that
+/// cannot be read is said (`history.error`), never a silent zero. PURE: the
+/// venue's object calls this (`/fold/kitchen`) with the images it holds. A
+/// window that is not one is the 400's text.
+///
+/// With what the venue knows of its till (`names`): a
 /// till line the owner has since mapped, or whose name is one dish's, is
 /// counted under that dish for these numbers alone (`till.rs`); the rest
 /// is named in `menu.unmatched`. `menu.today` is every dish at today's

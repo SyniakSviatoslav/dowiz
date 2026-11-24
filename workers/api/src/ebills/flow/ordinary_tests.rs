@@ -97,3 +97,38 @@ fn an_imported_till_sale_stays_in_history_and_analytics_after_the_rotation() {
     assert_eq!((ch, sums), (json!([1, 500]), json!([1, 1, 500])), "the archived day still counts the till: {a}");
     assert_eq!(a["history"]["archivedDays"].as_i64(), Some(1), "{}", a["history"]);
 }
+
+/// THE CROSSWALK THROUGH THE VENUE'S OWN OBJECT: the imported course's till code 56
+/// ("korca", 2 x 250) is no dish's, so the kitchen's margin names it unmatched; the
+/// owner links it to Futomaki through `POST /api/owner/ebills/map`, and the same
+/// kitchen answer then counts both portions under Futomaki and no longer lists 56.
+/// The link lives in the object's till table (`K_MAP`) and the kitchen fold reads it
+/// there, so this walks the wiring no unit test of the fold's arithmetic reaches.
+#[test]
+fn a_till_code_the_owner_links_counts_under_its_dish_in_the_kitchen_margin() {
+    let mut site = imported();
+    site.now_ms = SOLD_AT + 3 * 3_600_000;
+    let kitchen = |site: &Site| owner_get(site, crate::services::analytics::kitchen::kitchen, "/api/owner/analytics/kitchen?location_id=alpha&v=2&days=7");
+    // `menu.today` carries ids, no names; the venue has one dish, Futomaki.
+    let futomaki = |k: &Value| match k["menu"]["today"].as_array().unwrap().as_slice() {
+        [d] => d["id"].as_str().map(str::to_string),
+        _ => None,
+    };
+    let row = |k: &Value, id: &str| k["menu"]["dishes"].as_array().unwrap().iter().find(|d| d["id"] == id).map(|d| (d["sold"].as_i64(), d["attributed"].as_i64(), d["revenue"].as_i64()));
+    let codes = |k: &Value| k["menu"]["unmatched"].as_array().unwrap().iter().map(|u| u["code"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+
+    let before = kitchen(&site);
+    let dish = futomaki(&before).unwrap_or_else(|| panic!("the venue's dish is on the menu: {}", before["menu"]));
+    assert_eq!(codes(&before), ["56"], "not linked yet, the till code waits: {}", before["menu"]["unmatched"]);
+    assert_eq!(row(&before, &dish), None, "and Futomaki sold nothing: {}", before["menu"]["dishes"]);
+    assert_eq!(row(&before, "ebills:56"), Some((Some(2), Some(0), Some(500))), "the till line is its own row: {}", before["menu"]["dishes"]);
+
+    let t = site.login("alpha", "a@x.test");
+    let r = site.run(crate::ebills::routes::map, post(&at("/api/owner/ebills/map"), &json!({"code": "56", "product_id": dish})).bearer(&t).on("alpha"), &[]);
+    assert_eq!(r.status_code(), 200, "{}", r.body_str());
+
+    let after = kitchen(&site);
+    assert_eq!(row(&after, &dish), Some((Some(2), Some(2), Some(500))), "both portions under Futomaki, counted by the link: {}", after["menu"]["dishes"]);
+    assert!(codes(&after).is_empty(), "56 is no longer unmatched: {}", after["menu"]["unmatched"]);
+    assert_eq!(row(&after, "ebills:56"), None, "nor its own row: {}", after["menu"]["dishes"]);
+}
