@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # v1.1 by commit, Kani by version: nothing moves under a run. `true`: the action installs, the
       # next step runs, because the action's own step keeps no log.
       - uses: model-checking/kani-github-action@f838096619a707b0f6b2118cf435eaccfa33e51f
@@ -43,7 +43,7 @@ jobs:
           if grep -nE 'Status: (UNSATISFIABLE|UNDETERMINED)' kani.out; then echo "::error::a cover is unsatisfied or undetermined: that harness checked nothing"; exit 1; fi
           if grep -E 'of [0-9]+ cover properties satisfied' kani.out | awk '$2 != $4 { bad = 1 } END { exit bad }'; then :; else echo "::error::a harness left a cover unsatisfied"; exit 1; fi
           echo "kani: $n of $n harnesses verified, every cover satisfied"
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: kani-out
